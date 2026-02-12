@@ -11,7 +11,7 @@ import (
 type Worker struct {
 	Name string 
 	Queue queue.Queue
-	TaskMap map[uuid.UUID]task.Task
+	TaskMap map[uuid.UUID]*task.Task
 	TaskCount int 
 }
 
