@@ -2,14 +2,17 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/e-hua/netbula/internal/app/manager"
 	"github.com/e-hua/netbula/internal/app/worker"
+	"github.com/e-hua/netbula/internal/docker"
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
+	"github.com/moby/moby/client"
 )
 
 func main() {
@@ -70,4 +73,57 @@ func main() {
 	}
 
 	fmt.Printf("New node: %v\n", newNode)
+
+
+	fmt.Printf("Start creating a test container\n")
+	dockerTask, createResult := createContainer()
+	if createResult.Error != nil {
+		fmt.Printf("%v", createResult.Error)
+		os.Exit(1)
+	}
+
+	fmt.Printf("stopping container %s\n", createResult.ContainerId)
+	_ = stopContainer(dockerTask, createResult.ContainerId)
+}
+
+func createContainer() (*docker.Docker, *docker.DockerResult) {
+	dockerConfig := docker.Config{
+		Name: "test-container-1",
+		Image: "postgres:18",
+		Env: []string{
+		"POSTGRES_USER=netbula",
+		"POSTGRES_PASSWORD=secret",
+		},
+	}
+
+	apiClient, _ := client.New(client.FromEnv)
+	newDocker := docker.Docker{
+		Client: apiClient,
+		Config: dockerConfig,
+ 	}
+
+	result := newDocker.Run()
+	if (result.Error != nil) {
+		fmt.Printf("%v\n", result.Error)
+		return nil, nil
+	}
+
+	fmt.Printf(
+		"Container %s is running with config %v\n", 
+		result.ContainerId, 
+		dockerConfig,
+	)
+
+	return &newDocker, &result
+}
+
+func stopContainer(docker *docker.Docker, id string) *docker.DockerResult {
+	result := docker.Stop(id)
+	if (result.Error != nil) {
+		fmt.Printf("%v\n", result.Error)
+		return nil		
+	}
+	
+	fmt.Printf("Container %s has been stopped and removed\n", result.ContainerId)
+	return &result
 }
