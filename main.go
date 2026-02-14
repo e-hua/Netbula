@@ -2,13 +2,9 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"time"
 
-	"github.com/e-hua/netbula/internal/app/manager"
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/docker"
-	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -16,6 +12,7 @@ import (
 )
 
 func main() {
+	/*
 	newTask := task.Task {
 		ID: uuid.New(),
 		Name: "Task-1",
@@ -84,6 +81,41 @@ func main() {
 
 	fmt.Printf("stopping container %s\n", createResult.ContainerId)
 	_ = stopContainer(dockerTask, createResult.ContainerId)
+	*/
+
+	db := make(map[uuid.UUID]*task.Task)
+	newWorker := worker.NewWorker(*queue.New(), db)
+
+	newTask := task.Task {
+		ID: uuid.New(),
+		Name: "test-container-1",
+		State: task.Scheduled,
+		Image: "strm/helloworld-http",
+	}
+
+	fmt.Println("starting task")
+	newWorker.AddTask(newTask)
+
+	result := newWorker.RunTask()
+	if (result.Error != nil) {
+		panic(result.Error)
+	}
+
+	newTask.ContainerID = result.ContainerId
+	fmt.Printf("task %s is running in the container %s\n", newTask.ID, newTask.ContainerID)
+
+
+	// time.Sleep(30 * time.Second)
+
+
+	fmt.Printf("stopping task %s\n", newTask.ID)
+	newTask.State = task.Completed
+	newWorker.AddTask(newTask)
+
+	result = newWorker.RunTask()
+	if (result.Error != nil) {
+		panic(result.Error)
+	}
 }
 
 func createContainer() (*docker.Docker, *docker.DockerResult) {
