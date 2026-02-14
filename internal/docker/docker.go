@@ -162,3 +162,11 @@ func (docker *Docker) Stop(id string) DockerResult {
 	}
 }
 
+func NewDocker(config Config) Docker {
+	apiClient, _ := client.New(client.FromEnv)
+
+	return Docker {
+		Config: config,	
+		Client: apiClient,
+	}
+}
