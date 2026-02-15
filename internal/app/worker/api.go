@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/e-hua/netbula/lib/routers"
 	"github.com/go-chi/chi/v5"
@@ -35,6 +36,10 @@ func (a *Api) initRouter() {
 	a.Router.Route("/info", func (router chi.Router) {
 		router.Get("/", a.GetWorkerInfoHandler)
 	})
+
+	a.Router.Route("/stats", func (router chi.Router) {
+		router.Get("/", a.GetWorkerStatsHandler)
+	})
 }
 
 func (a *Api) Start() {
@@ -44,6 +49,17 @@ func (a *Api) Start() {
 
 type WorkerInfo struct {
 	Name string
+}
+
+func (a *Api) GetWorkerStatsHandler(responseWriter http.ResponseWriter, request *http.Request) {
+	stats, err := types.GetStats()
+
+	if (err != nil) {
+		routers.RespondError(responseWriter, 500, err.Error())
+		return;
+	}
+
+	routers.RespondJSON(responseWriter, 200, stats)
 }
 
 func (a *Api) GetWorkerInfoHandler(responseWriter http.ResponseWriter, request *http.Request) {
