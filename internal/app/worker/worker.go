@@ -25,8 +25,9 @@ type Worker struct {
 	TaskCount int 
 }
 
-func NewWorker(Queue queue.Queue, taskMap map[uuid.UUID]*task.Task) *Worker {
+func NewWorker(name string, Queue queue.Queue, taskMap map[uuid.UUID]*task.Task) *Worker {
 	return &Worker {
+		Name: name,
 		Queue: Queue,
 		taskMap: taskMap,
 	}
@@ -128,4 +129,28 @@ func (w *Worker) StopTask(taskToStop task.Task) docker.DockerResult {
 
 func (w *Worker) AddTask(taskToAdd task.Task) {
 	w.Queue.Enqueue(taskToAdd)
+}
+
+func (w *Worker) GetTasks() map[uuid.UUID]task.Task {
+	tasks := make(map[uuid.UUID]task.Task)
+	
+	for uuid, task := range(w.taskMap) {
+		tasks[uuid]	= *task
+	}
+	return tasks
+}
+
+func (w *Worker) RunTasksForever() {
+	for {
+		if (w.Queue.Len() != 0) {
+			result := w.RunTask()
+			if (result.Error != nil) {
+				log.Printf("Error running task: %v\n", result.Error)
+			}
+		} else {
+			log.Println("No tasks to run currently")
+		}
+			log.Println("Sleeping for 10 seconds")
+		time.Sleep(10 * time.Second)
+	}
 }
