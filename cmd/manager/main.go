@@ -14,6 +14,7 @@ import (
 
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/networks/security"
+	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
@@ -75,6 +76,9 @@ func main() {
 		fmt.Printf("Connected worker name: %v\n", workerInfo.Name)
 		httpClientMap[workerInfo.Name] = httpConnection
 
+		// Print worker status
+		workerStats := getWorkerStatus(httpClientMap[workerInfo.Name])
+		printWorkerStatus(workerStats)
 
 		taskEvent := task.TaskEvent {
 			ID: uuid.New(),
@@ -102,6 +106,9 @@ func main() {
 
 		time.Sleep(30 * time.Second)
 
+		workerStats = getWorkerStatus(httpClientMap[workerInfo.Name])
+		printWorkerStatus(workerStats)
+
 		// Delete the task 
 		path := "http://worker/tasks/" + newTask.ID.String()
 
@@ -111,5 +118,33 @@ func main() {
 		}
 		httpClientMap[workerInfo.Name].Do(req)
 		fmt.Println("Task deleted")
+
 	}	
+}
+
+func getWorkerStatus(client *http.Client) types.Stats {
+	workerStats := &types.Stats{}
+	resp, _ := client.Get("http://worker/stats")
+
+	err := json.NewDecoder(resp.Body).Decode(workerStats)
+	if (err != nil) {
+		panic(err)
+	}
+
+	return *workerStats
+}
+
+func printWorkerStatus(workerStats types.Stats) {
+	fmt.Printf("Worker machine status: \n")
+	fmt.Printf(
+		"[%v] RAM: %.2f GB, RAM usage: %.2f%%, Disk: %.2f GB, Disk usage: %.2f%%, CPU: %d cores, Average CPU usage: %.2f%%, CPU load index: %v\n", 
+		time.Now(), 
+		float64(workerStats.MemTotalInBytes) / float64(types.GigabyteInBytes), 
+		workerStats.MemUsedPercent,
+		float64(workerStats.DiskTotalInBytes) / float64(types.GigabyteInBytes), 
+		workerStats.DiskUsedPercent,
+		workerStats.CpuCount,
+		workerStats.CpuPercents[0],
+		workerStats.LoadAvg / float64(workerStats.CpuCount),
+	)
 }
