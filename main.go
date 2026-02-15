@@ -84,7 +84,7 @@ func main() {
 	*/
 
 	db := make(map[uuid.UUID]*task.Task)
-	newWorker := worker.NewWorker(*queue.New(), db)
+	newWorker := worker.NewWorker("", *queue.New(), db)
 
 	newTask := task.Task {
 		ID: uuid.New(),
