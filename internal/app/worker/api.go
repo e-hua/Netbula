@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
+	"slices"
 
 	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/e-hua/netbula/internal/task"
@@ -47,10 +49,6 @@ func (a *Api) Start() {
 	http.Serve(a.Session, a.Router)
 }
 
-type WorkerInfo struct {
-	Name string
-}
-
 func (a *Api) GetWorkerStatsHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	stats, err := types.GetStats()
 
@@ -63,9 +61,10 @@ func (a *Api) GetWorkerStatsHandler(responseWriter http.ResponseWriter, request 
 }
 
 func (a *Api) GetWorkerInfoHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	routers.RespondJSON(responseWriter, 200, WorkerInfo{Name: a.Worker.Name})
+	routers.RespondJSON(responseWriter, 200, a.Worker)
 }
 
+// Accepts a `TaskEvent` struct from the request body 
 func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()		
@@ -75,17 +74,18 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 	if (err != nil) {
 		msg := fmt.Sprintf("Error unmarshalling body: %v\n", err)
 		log.Printf("%s", msg)
-		routers.RespondError(responseWriter, 400, msg)
+		routers.RespondError(responseWriter, http.StatusBadRequest, msg)
 		return
 	}
 
 	a.Worker.AddTask(newTaskEvent.Task)
 	log.Printf("Added task %v\n", newTaskEvent.Task.ID)
-	routers.RespondJSON(responseWriter, 201, newTaskEvent.Task)
+	routers.RespondJSON(responseWriter, http.StatusCreated, newTaskEvent.Task)
 }
 
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	routers.RespondJSON(responseWriter, 200, a.Worker.GetTasks())
+	tasks := slices.Collect(maps.Values(a.Worker.GetTasks()))
+	routers.RespondJSON(responseWriter, 200, tasks)
 }
 
 func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.Request) {
