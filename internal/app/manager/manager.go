@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/task"
@@ -13,6 +14,9 @@ import (
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 )
+
+const UpdateTasksPeriod = 15 * time.Second
+const SendTasksPeriod = 15 * time.Second
 
 type Manager struct {
 	// Queue of pending taskevents 
@@ -59,6 +63,18 @@ func New(workers []uuid.UUID) *Manager {
 	}
 }
 
+func (m *Manager) getWorkerClient(workerId uuid.UUID) (*http.Client, error) {
+	client, ok := m.WorkerClientMap[workerId]
+	if (!ok) {
+		return nil, fmt.Errorf("Worker is not registered in the manager")
+	}
+	return client, nil
+}
+
+func (m *Manager) GetTasks() map[uuid.UUID]*task.Task {
+	return m.TaskMap
+}
+
 func (m *Manager) AddWorkerAndClient(w worker.Worker, client *http.Client) {
 	m.Workers = append(m.Workers, w.Uuid)
 	m.WorkerClientMap[w.Uuid] = client
@@ -73,7 +89,7 @@ func (m *Manager) SelectWorker() uuid.UUID {
 
 // For worker
 // Sync the states of the tasks in the manager with the workers 
-func (m *Manager) UpdateTasks() {
+func (m *Manager) updateTasks() {
 	for _, workerUuid := range(m.Workers) {
 		workerHttpClient := m.WorkerClientMap[workerUuid]
 		resp, err := workerHttpClient.Get("http://worker/tasks")
@@ -114,11 +130,23 @@ func (m *Manager) UpdateTasks() {
 // Sends the `taskEvent` when the "Pending" queue is not empty 
 func (m *Manager) SendWork() {
 	if (m.Pending.Len() > 0) {
-		selectedWorker := m.SelectWorker()
 		taskEvent := m.Pending.Dequeue().(task.TaskEvent)
+		m.EventMap[taskEvent.ID] = &taskEvent
+
+		// Set the `selectedWorker` to be the worker we retreived 
+		// If the task is already running
+		selectedWorker, ok := m.TaskWorkerMap[taskEvent.Task.ID] 
+		if (ok)  {
+			if (taskEvent.Task.State == task.Completed) {
+				m.stopTask(taskEvent.Task.ID)
+				return;
+			} 		
+		} else {
+			selectedWorker = m.SelectWorker()
+		}
+
 		pendingTask := taskEvent.Task	
 
-		m.EventMap[taskEvent.ID] = &taskEvent
 		m.WorkerTaskMap[selectedWorker] = append(m.WorkerTaskMap[selectedWorker], pendingTask.ID)
 		m.TaskWorkerMap[pendingTask.ID] = selectedWorker
 
@@ -129,6 +157,7 @@ func (m *Manager) SendWork() {
 		if err != nil {
 			log.Printf("Unable to marshal task object: %v.\n", taskEvent)
 		}
+
 
 		client := m.WorkerClientMap[selectedWorker]
 		resp, err := client.Post("http://worker/tasks", "application/json", bytes.NewBuffer(data))
@@ -168,4 +197,60 @@ func (m *Manager) SendWork() {
 // For user 
 func (m *Manager) AddTaskEvent(te task.TaskEvent) {
 	m.Pending.Enqueue(te)
+}
+
+func (m *Manager) stopTask(taskId uuid.UUID) {
+	workerId := m.TaskWorkerMap[taskId]
+
+	client, err := m.getWorkerClient(workerId) 
+	if (err != nil) {
+		return 
+	}
+
+	url := fmt.Sprintf("http://worker/tasks/%s", taskId.String())
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		log.Printf("error creating request to delete task %s: %v\n", taskId, err)
+		return
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("error connecting to worker <%s> at %s: %v\n", workerId ,url, err)
+		return
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		log.Printf("Error sending request: %v\n", err)
+		return
+	}
+
+	log.Printf("task %s has been sent to the worker to be stopped", taskId)
+}
+
+// Runs an infinite loop to sync the state of the manager with the workers 
+func (m *Manager) UpdateTasksForever() {
+	for {
+		fmt.Printf("[Manager] Updating tasks from %d workers\n", len(m.Workers))
+		m.updateTasks()
+		time.Sleep(UpdateTasksPeriod)
+	}
+}
+
+// Runs an infinite loop to send existing tasks to the workers 
+func (m *Manager) SendTasksForever() {
+	for {
+		if (m.Pending.Len() == 0) {
+			log.Println("No tasks to send, sleeping for 10 seconds")
+			time.Sleep(SendTasksPeriod)
+			continue
+		}
+
+		numOfTasksToSend := m.Pending.Len()
+
+		for range(numOfTasksToSend) {
+			m.SendWork()
+		}
+	}
 }

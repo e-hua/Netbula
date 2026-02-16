@@ -40,7 +40,7 @@ func (w *Worker) CollectStats() {
 	fmt.Println("Stats collected!")
 }
 
-func (w *Worker) RunTask() docker.DockerResult {
+func (w *Worker) runTask() docker.DockerResult {
 	targetTask := w.Queue.Dequeue()	
 	if (targetTask == nil) {
 		log.Println("No tasks in the queue")
@@ -146,14 +146,13 @@ func (w *Worker) GetTasks() map[uuid.UUID]task.Task {
 func (w *Worker) RunTasksForever() {
 	for {
 		if (w.Queue.Len() != 0) {
-			result := w.RunTask()
+			result := w.runTask()
 			if (result.Error != nil) {
 				log.Printf("Error running task: %v\n", result.Error)
 			}
 		} else {
-			log.Println("No tasks to run currently")
+			log.Println("No tasks to run currently, sleeping for 10 seconds")
+			time.Sleep(10 * time.Second)
 		}
-			log.Println("Sleeping for 10 seconds")
-		time.Sleep(10 * time.Second)
 	}
 }
