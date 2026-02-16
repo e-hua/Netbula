@@ -5,6 +5,9 @@ import (
 	"net/http"
 )
 
+type ErrResponse struct {
+	Message string `json:"error"` 
+}
 
 func RespondJSON(responseWriter http.ResponseWriter, statusCode int, payload any) {
 	responseWriter.Header().Set("Content-Type", "application/json")
