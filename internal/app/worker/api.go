@@ -53,15 +53,15 @@ func (a *Api) GetWorkerStatsHandler(responseWriter http.ResponseWriter, request 
 	stats, err := types.GetStats()
 
 	if (err != nil) {
-		routers.RespondError(responseWriter, 500, err.Error())
+		routers.RespondError(responseWriter, http.StatusInternalServerError, err.Error())
 		return;
 	}
 
-	routers.RespondJSON(responseWriter, 200, stats)
+	routers.RespondJSON(responseWriter, http.StatusOK, stats)
 }
 
 func (a *Api) GetWorkerInfoHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	routers.RespondJSON(responseWriter, 200, a.Worker)
+	routers.RespondJSON(responseWriter, http.StatusOK, a.Worker)
 }
 
 // Accepts a `TaskEvent` struct from the request body 
@@ -85,21 +85,21 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	tasks := slices.Collect(maps.Values(a.Worker.GetTasks()))
-	routers.RespondJSON(responseWriter, 200, tasks)
+	routers.RespondJSON(responseWriter, http.StatusOK, tasks)
 }
 
 func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	taskId := chi.URLParam(request, "taskId")
 
 	if (taskId == "") {
-		routers.RespondError(responseWriter, 400, "No taskId passed in the request.\n")
+		routers.RespondError(responseWriter, http.StatusBadRequest, "No taskId passed in the request.\n")
 	}
 
 	parsedId, _	:= uuid.Parse(taskId)
 	_, ok := a.Worker.taskMap[parsedId]
 	if (!ok) {
 		message := fmt.Sprintf("No task with ID %v found\n", parsedId)
-		routers.RespondError(responseWriter, 404, message)
+		routers.RespondError(responseWriter, http.StatusNotFound, message)
 	}
 
 	fmt.Printf("Parsed Id: %v\n", parsedId)
@@ -109,5 +109,5 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 	taskCopy.State = task.Completed
 	a.Worker.AddTask(taskCopy)
 	
-	responseWriter.WriteHeader(204)
+	responseWriter.WriteHeader(http.StatusNoContent)
 }
