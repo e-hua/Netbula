@@ -14,6 +14,8 @@ import (
 
 type Worker struct {
 	Name string 
+	Uuid uuid.UUID
+
 	// TODO: Implement a generic queue 
 	// Represents the "desired states" of tasks
 	Queue queue.Queue
@@ -28,6 +30,7 @@ type Worker struct {
 func NewWorker(name string, Queue queue.Queue, taskMap map[uuid.UUID]*task.Task) *Worker {
 	return &Worker {
 		Name: name,
+		Uuid: uuid.New(),
 		Queue: Queue,
 		taskMap: taskMap,
 	}
