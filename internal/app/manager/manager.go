@@ -3,12 +3,16 @@ package manager
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/e-hua/netbula/internal/app/worker"
+	"github.com/e-hua/netbula/internal/networks/types"
+	"github.com/e-hua/netbula/internal/node"
+	"github.com/e-hua/netbula/internal/scheduler"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/e-hua/netbula/lib/routers"
 	"github.com/golang-collections/collections/queue"
@@ -26,7 +30,6 @@ type Manager struct {
 	EventMap map[uuid.UUID]*task.TaskEvent
 
 	Workers []uuid.UUID
-	lastWorkerIdx int
 	
 	// Maybe we should introduce relational DB here 
 	WorkerTaskMap map[uuid.UUID][]uuid.UUID
@@ -34,9 +37,12 @@ type Manager struct {
 
 	WorkerClientMap map[uuid.UUID]*http.Client
 	WorkerNameMap map[uuid.UUID]string
+
+	WorkerNodes []*node.Node
+	Scheduler scheduler.Scheduler
 }
 
-func New(workers []uuid.UUID) *Manager {
+func New(workers []uuid.UUID, scheduler scheduler.Scheduler) *Manager {
 	taskMap := make(map[uuid.UUID]*task.Task)
 	eventMap := make(map[uuid.UUID]*task.TaskEvent)
 	workerTaskMap := make(map[uuid.UUID][]uuid.UUID)
@@ -53,14 +59,63 @@ func New(workers []uuid.UUID) *Manager {
 		EventMap: eventMap,
 
 		Workers: workers,
-		lastWorkerIdx: -1,
 
 		WorkerTaskMap: workerTaskMap,
 		TaskWorkerMap: taskWorkerMap,	
 
 		WorkerClientMap: make(map[uuid.UUID]*http.Client),
 		WorkerNameMap: make(map[uuid.UUID]string),
+
+		Scheduler: scheduler,
 	}
+}
+
+func (m *Manager) UpdateWorkerNodes() {
+	currNodes := make([]*node.Node, 0)
+
+	for _, workerUuid := range(m.Workers) {
+		workerHttpClient := m.WorkerClientMap[workerUuid]
+
+		resp, err := workerHttpClient.Get("http://worker/stats")
+		if (err != nil) {
+			log.Printf("Error sending the request to get node machine stats: %v\n", err)
+			continue
+		}
+
+		if (resp.StatusCode != http.StatusOK) {
+			log.Printf("Error sending requests, status code: %v\n", resp.StatusCode)
+			continue
+		}
+
+		newDecoder := json.NewDecoder(resp.Body)		
+		var stats types.Stats
+		err = newDecoder.Decode(&stats)
+		if (err != nil) {
+			log.Printf("Error unmarshalling node stats: %s\n", err.Error())
+			continue
+		}
+
+		currNode := &node.Node{
+			Name: m.WorkerNameMap[workerUuid],
+
+			Cores: stats.CpuCount,
+			CpuAveragePercent: stats.CpuPercents[0],
+			CpuAverageLoad: stats.LoadAvg,
+
+			Memory: int(stats.MemTotalInBytes),
+			MemoryAllocatedPercent: stats.MemUsedPercent,				
+
+			Disk: int(stats.DiskTotalInBytes),	
+			DiskAllocatedPercent: stats.DiskUsedPercent,
+
+			WorkerUuid: workerUuid,
+		}
+		currNodes = append(currNodes, currNode)
+
+		currNode.PrintNode()	
+	}
+
+	m.WorkerNodes = currNodes
 }
 
 func (m *Manager) getWorkerClient(workerId uuid.UUID) (*http.Client, error) {
@@ -81,10 +136,18 @@ func (m *Manager) AddWorkerAndClient(w worker.Worker, client *http.Client) {
 	m.WorkerNameMap[w.Uuid] = w.Name
 }
 
-func (m *Manager) SelectWorker() uuid.UUID {
-	nextWorkerIdx := (m.lastWorkerIdx + 1) % len(m.Workers)
-	m.lastWorkerIdx = nextWorkerIdx
-	return m.Workers[nextWorkerIdx]
+func (m *Manager) SelectWorker(t task.Task) (uuid.UUID, error) {
+	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerNodes)
+
+	if candidates == nil {
+		msg := fmt.Sprintf("No available candidates match resource request for task %v", t.ID)
+		err := errors.New(msg)
+		return uuid.Nil, err
+	}
+
+	scores := m.Scheduler.Score(t, candidates)
+	selectedNode := m.Scheduler.Pick(scores, candidates)
+	return selectedNode.WorkerUuid, nil
 }
 
 // For worker
@@ -142,7 +205,11 @@ func (m *Manager) SendWork() {
 				return;
 			} 		
 		} else {
-			selectedWorker = m.SelectWorker()
+			workerUuid, err := m.SelectWorker(taskEvent.Task)
+			if (err != nil) {
+				return 
+			}
+			selectedWorker = workerUuid
 		}
 
 		pendingTask := taskEvent.Task	
