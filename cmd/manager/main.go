@@ -10,12 +10,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/e-hua/netbula/internal/app/manager"
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/networks/security"
-	"github.com/e-hua/netbula/internal/networks/types"
+	"github.com/e-hua/netbula/internal/scheduler"
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 )
@@ -74,7 +73,7 @@ func main() {
 	formattedPort := fmt.Sprintf(":%v", os.Args[1])
 	listener := createTlsListener(formattedPort)
 
-	newManager := manager.New(make([]uuid.UUID, 0));
+	newManager := manager.New(make([]uuid.UUID, 0), &scheduler.RoundRobin{LastWorkerIdx: -1});
 	managerApi := manager.Api{Manager: newManager, Port: managerApiPort}
 
 	go newManager.SendTasksForever()
@@ -99,34 +98,6 @@ func main() {
 		fmt.Printf("Connected worker name: %v\n", workerInfo.Name)
 		newManager.AddWorkerAndClient(*workerInfo, httpClient)
 
-		workerStats := getWorkerStatus(httpClient)
-		printWorkerStatus(workerStats)
+		newManager.UpdateWorkerNodes()
 	}	
-}
-
-func getWorkerStatus(client *http.Client) types.Stats {
-	workerStats := &types.Stats{}
-	resp, _ := client.Get("http://worker/stats")
-
-	err := json.NewDecoder(resp.Body).Decode(workerStats)
-	if (err != nil) {
-		panic(err)
-	}
-
-	return *workerStats
-}
-
-func printWorkerStatus(workerStats types.Stats) {
-	fmt.Printf("Worker machine status: \n")
-	fmt.Printf(
-		"[%v] RAM: %.2f GB, RAM usage: %.2f%%, Disk: %.2f GB, Disk usage: %.2f%%, CPU: %d cores, Average CPU usage: %.2f%%, CPU load index: %v\n", 
-		time.Now().String(), 
-		float64(workerStats.MemTotalInBytes) / float64(types.GigabyteInBytes), 
-		workerStats.MemUsedPercent,
-		float64(workerStats.DiskTotalInBytes) / float64(types.GigabyteInBytes), 
-		workerStats.DiskUsedPercent,
-		workerStats.CpuCount,
-		workerStats.CpuPercents[0],
-		workerStats.LoadAvg / float64(workerStats.CpuCount),
-	)
 }
