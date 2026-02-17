@@ -61,6 +61,7 @@ func main() {
 		}
 
 		go newWorker.RunTasksForever()
+		go newWorker.UpdateTaskStatsForever()
 		// This is a blocking call
 		api.Start()
 	}
