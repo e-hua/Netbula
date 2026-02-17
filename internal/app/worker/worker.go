@@ -156,3 +156,48 @@ func (w *Worker) RunTasksForever() {
 		}
 	}
 }
+
+func (w *Worker) InspectTask(t task.Task, docker docker.Docker) docker.DockerInspectResponse {
+	return docker.Inspect(t.ContainerID)	
+}
+
+// Check if all running tasks are actually being runned by Docker
+func (w *Worker) updateTasks() {
+
+	for currTaskId, currTask := range(w.taskMap) {
+		newConfig := task.NewConfig(currTask)
+		newDocker := docker.NewDocker(newConfig)
+
+		if (currTask.State == task.Running) {
+			resp := w.InspectTask(*currTask, newDocker)
+			
+			// Container removed
+			if (resp.Container == nil) {
+				log.Printf("No container for running task %s\n", currTaskId)
+				w.taskMap[currTaskId].State = task.Failed
+				continue
+			}
+
+			// Container is not running 
+			if (
+				resp.Container.State.Status != "running" && 
+				resp.Container.State.Status != "created" && 
+				resp.Container.State.Status != "restarting") {
+					w.taskMap[currTaskId].State = task.Failed
+			}
+
+			w.taskMap[currTaskId].PortBindings = resp.Container.NetworkSettings.Ports
+		}
+	}
+}
+
+func (w *Worker) UpdateTaskStatsForever() {
+	for {
+		log.Println("Checking status of tasks")
+		w.updateTasks()
+		log.Println("Task updates completed")
+
+		log.Println("Sleeping for 15 seconds")
+		time.Sleep(15 * time.Second)
+	}
+}

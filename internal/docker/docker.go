@@ -48,6 +48,12 @@ type DockerResult struct {
 	Result string
 }
 
+type DockerInspectResponse struct {
+	Error error
+	Container *container.InspectResponse
+}
+
+
 func (docker *Docker) Run() DockerResult {
 	emptyContext := context.Background()
 	reader, err := docker.Client.ImagePull(
@@ -169,4 +175,16 @@ func NewDocker(config Config) Docker {
 		Config: config,	
 		Client: apiClient,
 	}
+}
+
+func (docker *Docker) Inspect(containerId string) DockerInspectResponse {
+	emptyContext := context.Background()
+	resp, err := docker.Client.ContainerInspect(emptyContext, containerId, client.ContainerInspectOptions{})
+
+	if (err != nil) {
+		log.Printf("Error inspecting container: %s\n", err)
+		return DockerInspectResponse{Error: err}
+	}
+
+	return DockerInspectResponse{Container: &resp.Container}
 }
