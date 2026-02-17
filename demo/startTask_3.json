@@ -1,0 +1,10 @@
+{
+  "ID": "6be4cb6b-61d1-40cb-bc7b-9cacefefa603",
+  "TargetState": 2,
+  "Task": {
+    "State": 1,
+    "ID": "21b23589-5d2d-4731-b5c9-a97e9832d023",
+    "Name": "testTask_3",
+    "Image": "strm/helloworld-http"
+  }
+}
