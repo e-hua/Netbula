@@ -109,7 +109,10 @@ func (m *Manager) UpdateWorkerNodes() {
 			DiskAllocatedPercent: stats.DiskUsedPercent,
 
 			WorkerUuid: workerUuid,
+
+			TaskCount: len(m.WorkerTaskMap[workerUuid]),
 		}
+
 		currNodes = append(currNodes, currNode)
 
 		currNode.PrintNode()	
@@ -136,7 +139,16 @@ func (m *Manager) AddWorkerAndClient(w worker.Worker, client *http.Client) {
 	m.WorkerNameMap[w.Uuid] = w.Name
 }
 
+/* 
+Update the stats of all the workers
+Then select the worker using the scheduler in the manager, with these new stats
+
+Throw an error if no candidate node is found 
+*/
 func (m *Manager) SelectWorker(t task.Task) (uuid.UUID, error) {
+	// Update the stats of all the nodes
+	m.UpdateWorkerNodes()
+
 	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerNodes)
 
 	if candidates == nil {
