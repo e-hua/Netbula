@@ -73,7 +73,7 @@ func main() {
 	formattedPort := fmt.Sprintf(":%v", os.Args[1])
 	listener := createTlsListener(formattedPort)
 
-	newManager := manager.New(make([]uuid.UUID, 0), &scheduler.Epvm{});
+	newManager := manager.New(make([]uuid.UUID, 0), &scheduler.Epvm{}, "memory");
 	managerApi := manager.Api{Manager: newManager, Port: managerApiPort}
 
 	go newManager.SendTasksForever()

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/e-hua/netbula/internal/docker"
+	"github.com/e-hua/netbula/internal/store"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -23,16 +24,23 @@ type Worker struct {
 	// Represents the "current states" of tasks
 	
 	// Should not be accessible outside the worker package
-	taskMap map[uuid.UUID]*task.Task
+	taskDb store.Store[task.Task]
 	TaskCount int 
 }
 
-func NewWorker(name string, Queue queue.Queue, taskMap map[uuid.UUID]*task.Task) *Worker {
+func NewWorker(name string, Queue queue.Queue, dbType string) *Worker {
+	var taskDb store.Store[task.Task]
+
+	switch (dbType) {
+	case "memory": 
+		taskDb = store.NewInMemoryStore[task.Task]()
+	}
+
 	return &Worker {
 		Name: name,
 		Uuid: uuid.New(),
 		Queue: Queue,
-		taskMap: taskMap,
+		taskDb: taskDb,
 	}
 }
 
@@ -48,14 +56,19 @@ func (w *Worker) runTask() docker.DockerResult {
 	}
 
 
-	// Type assertion: Panic if not of type Task
+	// Type assertion: Panic if it's not of type Task
 	taskQueued := targetTask.(task.Task)	
-	taskPersisted := w.taskMap[taskQueued.ID]
+	taskPersisted, err := w.taskDb.Get(taskQueued.ID.String())
 
 	// New task added to the worker
-	if (taskPersisted == nil) {
+	// No entry in DB 
+	if (err == nil && taskPersisted == nil) {
 		taskPersisted = &taskQueued
-		w.taskMap[taskQueued.ID] = taskPersisted
+		w.taskDb.Put(taskQueued.ID.String(), taskPersisted)
+	// Error reading from DB 
+	} else if (err != nil) {
+		log.Printf("Error getting the task from Task DB: %s", err.Error())
+		return docker.DockerResult{Error: err}
 	}
 
 	var result docker.DockerResult
@@ -98,7 +111,7 @@ func (w *Worker) StartTask(taskToStart task.Task) docker.DockerResult {
 	taskToStart.ContainerID = result.ContainerId
 	taskToStart.State = task.Running
 	
-	w.taskMap[taskToStart.ID] = &taskToStart
+	w.taskDb.Put(taskToStart.ID.String(), &taskToStart)
 
 	return result
 }
@@ -120,7 +133,7 @@ func (w *Worker) StopTask(taskToStop task.Task) docker.DockerResult {
 	taskToStop.FinishTime = time.Now().UTC()
 	taskToStop.State = task.Completed
 
-	w.taskMap[taskToStop.ID] = &taskToStop
+	w.taskDb.Put(taskToStop.ID.String(), &taskToStop)
 	log.Printf(
 		"Stopped and removed container %v for task %v \n", 
 		taskToStop.ContainerID, 
@@ -132,15 +145,6 @@ func (w *Worker) StopTask(taskToStop task.Task) docker.DockerResult {
 
 func (w *Worker) AddTask(taskToAdd task.Task) {
 	w.Queue.Enqueue(taskToAdd)
-}
-
-func (w *Worker) GetTasks() map[uuid.UUID]task.Task {
-	tasks := make(map[uuid.UUID]task.Task)
-	
-	for uuid, task := range(w.taskMap) {
-		tasks[uuid]	= *task
-	}
-	return tasks
 }
 
 func (w *Worker) RunTasksForever() {
@@ -164,17 +168,25 @@ func (w *Worker) InspectTask(t task.Task, docker docker.Docker) docker.DockerIns
 // Check if all running tasks are actually being runned by Docker
 func (w *Worker) updateTasks() {
 
-	for currTaskId, currTask := range(w.taskMap) {
+	tasks, err := w.taskDb.List()
+	if (err != nil) {
+		log.Printf("Error getting list of tasks from db: %v\n", err)
+		return
+	}
+
+	for currTaskId, currTask := range(tasks) {
 		newConfig := task.NewConfig(currTask)
 		newDocker := docker.NewDocker(newConfig)
 
 		if (currTask.State == task.Running) {
 			resp := w.InspectTask(*currTask, newDocker)
 			
+			taskInspected, _ := w.taskDb.Get(currTask.ID.String())
 			// Container removed
 			if (resp.Container == nil) {
 				log.Printf("No container for running task %s\n", currTaskId)
-				w.taskMap[currTaskId].State = task.Failed
+
+				taskInspected.State = task.Failed;
 				continue
 			}
 
@@ -183,11 +195,12 @@ func (w *Worker) updateTasks() {
 				resp.Container.State.Status != "running" && 
 				resp.Container.State.Status != "created" && 
 				resp.Container.State.Status != "restarting") {
-					w.taskMap[currTaskId].State = task.Failed
+					taskInspected.State = task.Failed;
 			}
 
-			w.taskMap[currTaskId].PortBindings = resp.Container.NetworkSettings.Ports
+			taskInspected.PortBindings = resp.Container.NetworkSettings.Ports
 		}
+
 	}
 }
 

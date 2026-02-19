@@ -13,6 +13,7 @@ import (
 	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/scheduler"
+	"github.com/e-hua/netbula/internal/store"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/e-hua/netbula/lib/routers"
 	"github.com/golang-collections/collections/queue"
@@ -26,8 +27,8 @@ type Manager struct {
 	// Queue of pending taskevents 
 	Pending queue.Queue
 	
-	TaskMap map[uuid.UUID]*task.Task
-	EventMap map[uuid.UUID]*task.TaskEvent
+	TaskDb store.Store[task.Task]
+	EventDb store.Store[task.TaskEvent]
 
 	Workers []uuid.UUID
 	
@@ -42,9 +43,7 @@ type Manager struct {
 	Scheduler scheduler.Scheduler
 }
 
-func New(workers []uuid.UUID, scheduler scheduler.Scheduler) *Manager {
-	taskMap := make(map[uuid.UUID]*task.Task)
-	eventMap := make(map[uuid.UUID]*task.TaskEvent)
+func New(workers []uuid.UUID, scheduler scheduler.Scheduler, dbType string) *Manager {
 	workerTaskMap := make(map[uuid.UUID][]uuid.UUID)
 	taskWorkerMap := make(map[uuid.UUID]uuid.UUID)
 
@@ -52,11 +51,17 @@ func New(workers []uuid.UUID, scheduler scheduler.Scheduler) *Manager {
 		workerTaskMap[workers[workerIdx]] = []uuid.UUID{}
 	}	
 
-	return &Manager{
-		Pending: *queue.New(),
+	var taskStorage store.Store[task.Task]
+	var taskEventStorage store.Store[task.TaskEvent]
 
-		TaskMap: taskMap,
-		EventMap: eventMap,
+	switch dbType {
+	case "memory": 
+		taskStorage = store.NewInMemoryStore[task.Task]()
+		taskEventStorage = store.NewInMemoryStore[task.TaskEvent]()	
+	}
+
+	m := &Manager{
+		Pending: *queue.New(),
 
 		Workers: workers,
 
@@ -67,7 +72,12 @@ func New(workers []uuid.UUID, scheduler scheduler.Scheduler) *Manager {
 		WorkerNameMap: make(map[uuid.UUID]string),
 
 		Scheduler: scheduler,
+
+		TaskDb: taskStorage,
+		EventDb: taskEventStorage,
 	}
+
+	return m
 }
 
 func (m *Manager) UpdateWorkerNodes() {
@@ -129,10 +139,6 @@ func (m *Manager) getWorkerClient(workerId uuid.UUID) (*http.Client, error) {
 	return client, nil
 }
 
-func (m *Manager) GetTasks() map[uuid.UUID]*task.Task {
-	return m.TaskMap
-}
-
 func (m *Manager) AddWorkerAndClient(w worker.Worker, client *http.Client) {
 	m.Workers = append(m.Workers, w.Uuid)
 	m.WorkerClientMap[w.Uuid] = client
@@ -186,17 +192,21 @@ func (m *Manager) updateTasks() {
 
 		for _, currTask := range(tasks) {
 			log.Printf("Attempting to update task %v\n", currTask.ID)
-			_, ok := m.TaskMap[currTask.ID]
 
-			if (!ok) {
+			taskPersisted, error := m.TaskDb.Get(currTask.ID.String())
+			if (error != nil) {
 				log.Printf("Task with ID %s not found\n", currTask.ID)
 				continue
 			}
 
-			m.TaskMap[currTask.ID].State = currTask.State
-			m.TaskMap[currTask.ID].StartTime = currTask.StartTime
-			m.TaskMap[currTask.ID].FinishTime = currTask.FinishTime
-			m.TaskMap[currTask.ID].ContainerID = currTask.ContainerID
+			taskPersisted.State = currTask.State
+
+			taskPersisted.StartTime = currTask.StartTime
+			taskPersisted.FinishTime = currTask.FinishTime
+			taskPersisted.ContainerID = currTask.ContainerID
+			taskPersisted.PortBindings = currTask.PortBindings
+
+			m.TaskDb.Put(taskPersisted.ID.String(), taskPersisted)
 		}
 	}
 }
@@ -206,12 +216,17 @@ func (m *Manager) updateTasks() {
 func (m *Manager) SendWork() {
 	if (m.Pending.Len() > 0) {
 		taskEvent := m.Pending.Dequeue().(task.TaskEvent)
-		m.EventMap[taskEvent.ID] = &taskEvent
+		err := m.EventDb.Put(taskEvent.ID.String(), &taskEvent)
+		if (err != nil) {
+			log.Printf("Error attempting to store task event %s: %s\n", taskEvent.ID.String(), err)
+			return
+		}
 
-		// Set the `selectedWorker` to be the worker we retreived 
 		// If the task is already running
+		// Set the `selectedWorker` to be the worker we retreived 
 		selectedWorker, ok := m.TaskWorkerMap[taskEvent.Task.ID] 
 		if (ok)  {
+			// If we're stopping the task
 			if (taskEvent.Task.State == task.Completed) {
 				m.stopTask(taskEvent.Task.ID)
 				return;
@@ -226,11 +241,13 @@ func (m *Manager) SendWork() {
 
 		pendingTask := taskEvent.Task	
 
+		// Assign this task to the worker on manager side 
 		m.WorkerTaskMap[selectedWorker] = append(m.WorkerTaskMap[selectedWorker], pendingTask.ID)
 		m.TaskWorkerMap[pendingTask.ID] = selectedWorker
 
+		// Change its status to Scheduled 
 		pendingTask.State = task.Scheduled
-		m.TaskMap[pendingTask.ID] = &pendingTask
+		m.TaskDb.Put(pendingTask.ID.String(), &pendingTask)
 
 		data, err := json.Marshal(taskEvent)
 		if err != nil {

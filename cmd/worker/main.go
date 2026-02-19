@@ -8,9 +8,7 @@ import (
 
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/networks/security"
-	"github.com/e-hua/netbula/internal/task"
 	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 )
 
@@ -43,7 +41,7 @@ func main() {
 	tlsToken := os.Args[2]			
 	workerName := os.Args[3]
 
-	newWorker := worker.NewWorker(workerName, *queue.New(), make(map[uuid.UUID]*task.Task))
+	newWorker := worker.NewWorker(workerName, *queue.New(), "memory")
 
 	tlsConfig := security.GetWorkerTlsConfig(tlsToken)
 

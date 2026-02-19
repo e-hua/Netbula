@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/e-hua/netbula/internal/task"
@@ -65,12 +63,16 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 
 // GET localhost:<Port>/tasks
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	tasks := slices.Collect(maps.Values(a.Manager.GetTasks()))
+	tasks, err := a.Manager.TaskDb.List()
+	if (err != nil) {
+		routers.RespondError(responseWriter, http.StatusInternalServerError, err.Error())
+	}
+
 	if (tasks == nil) {
 		tasks = []*task.Task{}
 	}
 
-	routers.RespondJSON(responseWriter, 200, tasks)
+	routers.RespondJSON(responseWriter, http.StatusOK, tasks)
 }
 
 // DELETE localhost:<Port>/tasks/{taskId}
@@ -83,11 +85,18 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 	}
 
 	parsedId, _	:= uuid.Parse(taskId)
-	_, ok := a.Manager.TaskMap[parsedId]
-	if (!ok) {
-		message := fmt.Sprintf("No task with ID %v found\n", parsedId)
+	fmt.Printf("Parsed Id: %v\n", parsedId)
+
+	taskToStop, err := a.Manager.TaskDb.Get(parsedId.String())
+	if (err != nil) {
+		message := fmt.Sprintf("No task with ID %v found in storage\n", parsedId)
 		routers.RespondError(responseWriter, 404, message)
+		return
 	}
+
+	// Pass by value
+	taskCopy := *taskToStop
+	taskCopy.State = task.Completed
 
 	stopTaskEvent := task.TaskEvent {
 		ID: uuid.New(),
@@ -95,14 +104,7 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 		Timestamp: time.Now(),
 	}
 
-	fmt.Printf("Parsed Id: %v\n", parsedId)
-	taskToStop := a.Manager.TaskMap[parsedId]
-	// Pass by value
-	taskCopy := *taskToStop
-	taskCopy.State = task.Completed
-
 	stopTaskEvent.Task = taskCopy
-
 	a.Manager.AddTaskEvent(stopTaskEvent)
 	
 	responseWriter.WriteHeader(204)
