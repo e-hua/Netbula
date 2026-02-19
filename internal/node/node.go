@@ -2,7 +2,7 @@ package node
 
 import (
 	"fmt"
-	"time"
+	"log"
 
 	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/google/uuid"
@@ -30,9 +30,8 @@ type Node struct {
 
 func (node *Node) PrintNode() {
 	fmt.Printf("Worker node [%v] status: \n", node.Name)
-	fmt.Printf(
-		"[%v] RAM: %.2f GB, RAM usage: %.2f%%, Disk: %.2f GB, Disk usage: %.2f%%, CPU: %d cores, Average CPU usage: %.2f%%, CPU load index: %v\n\n", 
-		time.Now().String(), 
+	log.Printf(
+		"RAM: %.2f GB, RAM usage: %.2f%%, Disk: %.2f GB, Disk usage: %.2f%%, CPU: %d cores, Average CPU usage: %.2f%%, CPU load index: %v\n\n", 
 		float64(node.Memory) / float64(types.GigabyteInBytes), 
 		node.MemoryAllocatedPercent,
 		float64(node.Disk) / float64(types.GigabyteInBytes), 
