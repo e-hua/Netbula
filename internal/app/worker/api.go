@@ -47,6 +47,9 @@ func (a *Api) Start() {
 	http.Serve(a.Session, a.Router)
 }
 
+
+// GET <worker-manager-connection>/stats
+// Sending the specs and loads of the machine worker program is running on 
 func (a *Api) GetWorkerStatsHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	stats, err := types.GetStats()
 
@@ -58,11 +61,15 @@ func (a *Api) GetWorkerStatsHandler(responseWriter http.ResponseWriter, request 
 	routers.RespondJSON(responseWriter, http.StatusOK, stats)
 }
 
+// GET <worker-manager-connection>/info
+// Sending the info of the worker(mainly the name and uuid)
 func (a *Api) GetWorkerInfoHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	routers.RespondJSON(responseWriter, http.StatusOK, a.Worker)
 }
 
+// POST <worker-manager-connection>/tasks
 // Accepts a `TaskEvent` struct from the request body 
+// Add the assigned task to the pending queue of tasks `a.Worker.AddTask()`
 func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()		
@@ -81,6 +88,9 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 	routers.RespondJSON(responseWriter, http.StatusCreated, newTaskEvent.Task)
 }
 
+// GET <worker-manager-connection>/tasks
+// List all the tasks in this worker 
+// And send this array of tasks
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	tasks, err := a.Worker.taskDb.List()
 	if (err != nil) {
@@ -91,6 +101,10 @@ func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.
 	routers.RespondJSON(responseWriter, http.StatusOK, tasks)
 }
 
+// DELETE <worker-manager-connection>/tasks/{taskId}
+// Creates a `Task` struct from the `taskId` in the request params
+// Mark its desired state as "complete"
+// And put it in the "pending queue" of desired task states
 func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	taskId := chi.URLParam(request, "taskId")
 
