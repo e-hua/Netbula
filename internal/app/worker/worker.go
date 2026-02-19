@@ -25,7 +25,6 @@ type Worker struct {
 	
 	// Should not be accessible outside the worker package
 	taskDb store.Store[task.Task]
-	TaskCount int 
 }
 
 func NewWorker(name string, Queue queue.Queue, dbType string) *Worker {
@@ -34,6 +33,12 @@ func NewWorker(name string, Queue queue.Queue, dbType string) *Worker {
 	switch (dbType) {
 	case "memory": 
 		taskDb = store.NewInMemoryStore[task.Task]()
+	case "persistent": 
+		persistentTaskDb, err := store.NewPersistentStore[task.Task](0600, fmt.Sprintf("worker_%s.db", name), "tasks")
+		if (err != nil) {
+			log.Fatalf("Error creating the persistent task DB: %v\n", err)
+		}
+		taskDb = persistentTaskDb
 	}
 
 	return &Worker {
@@ -184,9 +189,10 @@ func (w *Worker) updateTasks() {
 			taskInspected, _ := w.taskDb.Get(currTask.ID.String())
 			// Container removed
 			if (resp.Container == nil) {
-				log.Printf("No container for running task %s\n", currTaskId)
+				log.Printf("No container for running task %d\n", currTaskId)
 
 				taskInspected.State = task.Failed;
+				w.taskDb.Put(taskInspected.ID.String(), taskInspected)
 				continue
 			}
 
