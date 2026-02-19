@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"net/http"
-	"slices"
 
 	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/e-hua/netbula/internal/task"
@@ -84,7 +82,12 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 }
 
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	tasks := slices.Collect(maps.Values(a.Worker.GetTasks()))
+	tasks, err := a.Worker.taskDb.List()
+	if (err != nil) {
+		log.Printf("Error getting list of tasks: %v\n", err)
+		routers.RespondError(responseWriter, http.StatusOK, err.Error())
+		return;
+	}
 	routers.RespondJSON(responseWriter, http.StatusOK, tasks)
 }
 
@@ -96,14 +99,20 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 	}
 
 	parsedId, _	:= uuid.Parse(taskId)
-	_, ok := a.Worker.taskMap[parsedId]
-	if (!ok) {
-		message := fmt.Sprintf("No task with ID %v found\n", parsedId)
-		routers.RespondError(responseWriter, http.StatusNotFound, message)
+	taskToStop, err := a.Worker.taskDb.Get(parsedId.String())
+
+	if (taskToStop == nil) {
+		if (err != nil) {
+			message := fmt.Sprintf("Error getting task from storage: %v\n", err.Error())
+			routers.RespondError(responseWriter, http.StatusNotFound, message)
+		} else {
+			message := fmt.Sprintf("No task with ID %v found\n", parsedId)
+			routers.RespondError(responseWriter, http.StatusNotFound, message)
+		}
+		return
 	}
 
 	fmt.Printf("Parsed Id: %v\n", parsedId)
-	taskToStop := a.Worker.taskMap[parsedId]
 	// Pass by value 
 	taskCopy := *taskToStop
 	taskCopy.State = task.Completed
