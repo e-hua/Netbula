@@ -2,35 +2,23 @@ package store
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 
 	bolt "go.etcd.io/bbolt"
 )
 
 type PersistentStore[T any] struct {
 	Db *bolt.DB
-	DbFilePath string
-	FileMode os.FileMode
 	BucketName string	
 }
 
-func NewPersistentStore[T any](mode os.FileMode, dbFilePath string, bucketName string) (*PersistentStore[T], error){
-	db, err := bolt.Open(dbFilePath, mode, nil)
-	if (err != nil) {
-		return nil, err
-	}
-
-
+func NewPersistentStore[T any](db *bolt.DB, bucketName string) (*PersistentStore[T], error) {
 	// Need to create the bucket
 	persistentDb := &PersistentStore[T]{
 		Db: db,
-		DbFilePath: dbFilePath,
-		FileMode: mode,
 		BucketName: bucketName,
 	}
 
-	err = persistentDb.CreateBucket()
+	err := persistentDb.CreateBucket()
 
 	return persistentDb, err
 }
@@ -52,17 +40,27 @@ func (p *PersistentStore[T]) Put(key string, value *T) error {
 
 func (p *PersistentStore[T]) Get(key string) (*T, error) {
 	var val T
+	var isInBucket bool;
 
 	err := p.Db.View(func (tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(p.BucketName))	
 		valueInBytes := bucket.Get([]byte(key))
 
+		// Key not in the bucket 
+		// Not returning an error
 		if (valueInBytes == nil) {
-			return fmt.Errorf("Key %v not found in the bucket", key)
+			isInBucket = false
+			return nil
 		}
 
+		// Key in the bucket 	
+		isInBucket = true
 		return json.Unmarshal(valueInBytes, &val)
 	})
+
+	if (!isInBucket) {
+		return nil, nil
+	}
 
 	return &val, err 
 }
@@ -90,6 +88,32 @@ func (p *PersistentStore[T]) List() ([]*T, error) {
 	})
 
 	return values, err
+}
+
+func (p *PersistentStore[T]) Entries() ([]Entry[T], error) {
+	valueCount, err := p.Count()
+	if (err != nil) {
+		return nil, err
+	}
+
+	var entries []Entry[T] = make([]Entry[T], 0, valueCount)
+
+	err = p.Db.View(func (tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(p.BucketName))
+
+		err := bucket.ForEach(func (k, valueInBytes []byte) error {
+			var value T
+			
+			currErr := json.Unmarshal(valueInBytes, &value)
+			entries = append(entries, Entry[T]{Key: string(k), Value: &value})
+
+			return currErr
+		})
+
+		return err
+	})
+
+	return entries, err
 }
 
 func (p *PersistentStore[T]) Count() (int, error) {
