@@ -10,6 +10,7 @@ require (
 	github.com/moby/moby/api v1.53.0
 	github.com/moby/moby/client v0.2.2
 	github.com/shirou/gopsutil/v4 v4.26.1
+	go.etcd.io/bbolt v1.4.3
 )
 
 require (

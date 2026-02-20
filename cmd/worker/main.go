@@ -41,7 +41,7 @@ func main() {
 	tlsToken := os.Args[2]			
 	workerName := os.Args[3]
 
-	newWorker := worker.NewWorker(workerName, *queue.New(), "memory")
+	newWorker := worker.NewWorker(workerName, *queue.New(), "persistent")
 
 	tlsConfig := security.GetWorkerTlsConfig(tlsToken)
 

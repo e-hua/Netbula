@@ -15,7 +15,6 @@ import (
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/e-hua/netbula/internal/scheduler"
-	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 )
 
@@ -73,7 +72,7 @@ func main() {
 	formattedPort := fmt.Sprintf(":%v", os.Args[1])
 	listener := createTlsListener(formattedPort)
 
-	newManager := manager.New(make([]uuid.UUID, 0), &scheduler.Epvm{}, "memory");
+	newManager := manager.New(&scheduler.Epvm{}, "persistent");
 	managerApi := manager.Api{Manager: newManager, Port: managerApiPort}
 
 	go newManager.SendTasksForever()

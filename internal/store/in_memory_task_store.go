@@ -25,13 +25,23 @@ func (i *InMemoryStore[T]) Get(key string) (*T, error) {
 }
 
 func (i *InMemoryStore[T]) List() ([]*T, error) {
-	elements := make([]*T, 0)
+	elements := make([]*T, 0, len(i.Db))
 
 	for _, currElem := range(i.Db) {
 		elements = append(elements, currElem)
 	}
 
 	return elements, nil
+}
+
+func (i *InMemoryStore[T]) Entries() ([]Entry[T], error) {
+	entries := make([]Entry[T], 0, )
+
+	for currKey, currElem := range(i.Db) {
+		entries = append(entries, Entry[T]{Key: currKey, Value: currElem})
+	}
+
+	return entries, nil
 }
 
 func (i *InMemoryStore[T]) Count() (int, error) {
