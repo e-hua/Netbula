@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
+	"os"
+	"slices"
 	"time"
 
 	"github.com/e-hua/netbula/internal/app/worker"
@@ -18,63 +21,115 @@ import (
 	"github.com/e-hua/netbula/lib/routers"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
+	bolt "go.etcd.io/bbolt"
 )
 
-const UpdateTasksPeriod = 15 * time.Second
-const SendTasksPeriod = 15 * time.Second
+const (
+	UpdateTasksPeriod = 15 * time.Second
+	SendTasksPeriod = 15 * time.Second
+	ManagerDbPath = "manager.db"
+	ManagerDbFileMode os.FileMode = 0600
+)
 
 type Manager struct {
 	// Queue of pending taskevents 
 	Pending queue.Queue
 	
-	TaskDb store.Store[task.Task]
-	EventDb store.Store[task.TaskEvent]
+	TaskDb store.Store[task.Task] // uuid -> task
+	EventDb store.Store[task.TaskEvent] // uuid -> taskEvent
+	TaskWorkerDb store.Store[uuid.UUID] // TaskUuid -> WorkerUuid
+	WorkerNameDb store.Store[string] // uuid -> WorkerName
 
+	// These are the info inferred from the TaskWorkerDb on start of the application
 	Workers []uuid.UUID
-	
-	// Maybe we should introduce relational DB here 
 	WorkerTaskMap map[uuid.UUID][]uuid.UUID
-	TaskWorkerMap map[uuid.UUID]uuid.UUID
 
 	WorkerClientMap map[uuid.UUID]*http.Client
-	WorkerNameMap map[uuid.UUID]string
 
-	WorkerNodes []*node.Node
 	Scheduler scheduler.Scheduler
+
+	// Will be updated periodically
+	WorkerNodes []*node.Node
 }
 
-func New(workers []uuid.UUID, scheduler scheduler.Scheduler, dbType string) *Manager {
-	workerTaskMap := make(map[uuid.UUID][]uuid.UUID)
-	taskWorkerMap := make(map[uuid.UUID]uuid.UUID)
-
-	for workerIdx := range(workers) {
-		workerTaskMap[workers[workerIdx]] = []uuid.UUID{}
-	}	
-
+// Loading the DBs and process them in memory  
+// Infer the rest of the fields before
+// Creating a new manager struct 
+func New(scheduler scheduler.Scheduler, dbType string) *Manager {
 	var taskStorage store.Store[task.Task]
 	var taskEventStorage store.Store[task.TaskEvent]
+	var taskToWorkerStorage store.Store[uuid.UUID]
+	var workerNameStorage store.Store[string]
 
 	switch dbType {
 	case "memory": 
 		taskStorage = store.NewInMemoryStore[task.Task]()
 		taskEventStorage = store.NewInMemoryStore[task.TaskEvent]()	
+		taskToWorkerStorage = store.NewInMemoryStore[uuid.UUID]()
+		workerNameStorage = store.NewInMemoryStore[string]()
+	case "persistent": 
+		db, err := bolt.Open(ManagerDbPath, ManagerDbFileMode, nil)
+		if (err != nil) {
+			log.Fatalf("Error creating the persistent DB for manager: %v\n", err)
+		}
+
+		persistentTaskDb, err := store.NewPersistentStore[task.Task](db, "tasks")
+		persistentTaskEventDb, err := store.NewPersistentStore[task.TaskEvent](db, "events")
+		persistentTaskToWorkerDb, err := store.NewPersistentStore[uuid.UUID](db, "task_to_worker")
+		persistentWorkerNameDb, err := store.NewPersistentStore[string](db, "worker_id_to_name")
+		// TODO: Add error handling here 
+
+		taskStorage = persistentTaskDb
+		taskEventStorage = persistentTaskEventDb
+		taskToWorkerStorage = persistentTaskToWorkerDb
+		workerNameStorage = persistentWorkerNameDb
 	}
+
+	taskWorkerEntries, err := taskToWorkerStorage.Entries()
+	if (err != nil) {
+		log.Printf("Error getting entries in the db mapping tasks to workers")
+		taskWorkerEntries = make([]store.Entry[uuid.UUID], 0)
+	}
+
+	workerTaskMap := make(map[uuid.UUID][]uuid.UUID)
+	workers := make([]uuid.UUID, 0)
+
+	// Infer the content of workerTaskMap from taskWorkerDb
+	for _, taskWorkerEntry := range(taskWorkerEntries) {
+		taskUuid, err := uuid.Parse(taskWorkerEntry.Key)
+		if (err != nil) {
+			log.Printf("Error parsing the task UUID from the DB")
+			continue
+		}
+
+		workerUuid := *taskWorkerEntry.Value	
+
+		assignedTaskSlice, ok := workerTaskMap[workerUuid]
+		if (!ok) {
+			assignedTaskSlice = make([]uuid.UUID, 0)
+		}
+
+		assignedTaskSlice = append(assignedTaskSlice, taskUuid)
+		workerTaskMap[workerUuid] = assignedTaskSlice
+	}
+
+	// Infer the content of the workers from the workerTaskMap
+	workers = slices.Collect(maps.Keys(workerTaskMap))
 
 	m := &Manager{
 		Pending: *queue.New(),
 
-		Workers: workers,
-
-		WorkerTaskMap: workerTaskMap,
-		TaskWorkerMap: taskWorkerMap,	
-
-		WorkerClientMap: make(map[uuid.UUID]*http.Client),
-		WorkerNameMap: make(map[uuid.UUID]string),
-
-		Scheduler: scheduler,
-
 		TaskDb: taskStorage,
 		EventDb: taskEventStorage,
+		TaskWorkerDb: taskToWorkerStorage,	
+		WorkerNameDb: workerNameStorage,
+
+		Workers: workers,
+		WorkerTaskMap: workerTaskMap,
+
+		WorkerClientMap: make(map[uuid.UUID]*http.Client),
+
+		Scheduler: scheduler,
 	}
 
 	return m
@@ -105,8 +160,10 @@ func (m *Manager) UpdateWorkerNodes() {
 			continue
 		}
 
+		workerName, _ := m.WorkerNameDb.Get(workerUuid.String())
+
 		currNode := &node.Node{
-			Name: m.WorkerNameMap[workerUuid],
+			Name: *workerName,
 
 			Cores: stats.CpuCount,
 			CpuAveragePercent: stats.CpuPercents[0],
@@ -142,7 +199,7 @@ func (m *Manager) getWorkerClient(workerId uuid.UUID) (*http.Client, error) {
 func (m *Manager) AddWorkerAndClient(w worker.Worker, client *http.Client) {
 	m.Workers = append(m.Workers, w.Uuid)
 	m.WorkerClientMap[w.Uuid] = client
-	m.WorkerNameMap[w.Uuid] = w.Name
+	m.WorkerNameDb.Put(w.Uuid.String(), &w.Name)
 }
 
 /* 
@@ -172,7 +229,12 @@ func (m *Manager) SelectWorker(t task.Task) (uuid.UUID, error) {
 // Sync the states of the tasks in the manager with the workers 
 func (m *Manager) updateTasks() {
 	for _, workerUuid := range(m.Workers) {
-		workerHttpClient := m.WorkerClientMap[workerUuid]
+		workerHttpClient, ok := m.WorkerClientMap[workerUuid]
+		if (!ok) {
+			log.Printf("HTTP client is no long available for the worker: %v", workerUuid.String())
+			continue
+		}
+
 		resp, err := workerHttpClient.Get("http://worker/tasks")
 		if (err != nil) {
 			log.Printf("Error sending the request to sync states: %v\n", err)
@@ -224,26 +286,38 @@ func (m *Manager) SendWork() {
 
 		// If the task is already running
 		// Set the `selectedWorker` to be the worker we retreived 
-		selectedWorker, ok := m.TaskWorkerMap[taskEvent.Task.ID] 
-		if (ok)  {
+		selectedWorker, err := m.TaskWorkerDb.Get(taskEvent.Task.ID.String())
+
+		if (err != nil) {
+			log.Printf("Error getting worker from the TaskWorkerDb: %v", err)
+			return 
+		// If the worker is in DB 
+		} else if (selectedWorker != nil) {
 			// If we're stopping the task
 			if (taskEvent.Task.State == task.Completed) {
 				m.stopTask(taskEvent.Task.ID)
-				return;
-			} 		
+			} else {
+				log.Printf(
+					"Cannot send task with target state %v to the worker, task is already being runned", 
+					taskEvent.Task.State,
+				)
+			}
+			return;
+		// If the worker is not in DB 
 		} else {
 			workerUuid, err := m.SelectWorker(taskEvent.Task)
 			if (err != nil) {
+				log.Printf("Cannot assign task to any of the worker node: %v", err)
 				return 
 			}
-			selectedWorker = workerUuid
+			selectedWorker = &workerUuid
 		}
 
 		pendingTask := taskEvent.Task	
 
 		// Assign this task to the worker on manager side 
-		m.WorkerTaskMap[selectedWorker] = append(m.WorkerTaskMap[selectedWorker], pendingTask.ID)
-		m.TaskWorkerMap[pendingTask.ID] = selectedWorker
+		m.WorkerTaskMap[*selectedWorker] = append(m.WorkerTaskMap[*selectedWorker], pendingTask.ID)
+		m.TaskWorkerDb.Put(pendingTask.ID.String(), selectedWorker)
 
 		// Change its status to Scheduled 
 		pendingTask.State = task.Scheduled
@@ -255,7 +329,7 @@ func (m *Manager) SendWork() {
 		}
 
 
-		client := m.WorkerClientMap[selectedWorker]
+		client := m.WorkerClientMap[*selectedWorker]
 		resp, err := client.Post("http://worker/tasks", "application/json", bytes.NewBuffer(data))
 		if (err != nil) {
 			log.Printf("Error connecting to %v: %v\n", selectedWorker, err)
@@ -296,9 +370,13 @@ func (m *Manager) AddTaskEvent(te task.TaskEvent) {
 }
 
 func (m *Manager) stopTask(taskId uuid.UUID) {
-	workerId := m.TaskWorkerMap[taskId]
+	workerId, err := m.TaskWorkerDb.Get(taskId.String()) 
+	if (err != nil) {
+		log.Printf("Error getting workerId from db: %s", err)
+		return 
+	}
 
-	client, err := m.getWorkerClient(workerId) 
+	client, err := m.getWorkerClient(*workerId) 
 	if (err != nil) {
 		return 
 	}
