@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/e-hua/netbula/internal/docker"
@@ -11,6 +12,7 @@ import (
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
+	bolt "go.etcd.io/bbolt"
 )
 
 type Worker struct {
@@ -27,6 +29,11 @@ type Worker struct {
 	taskDb store.Store[task.Task]
 }
 
+const (
+	WorkerDbPath = "worker.db"
+	WorkerDbFileMode os.FileMode = 0600
+)
+
 func NewWorker(name string, Queue queue.Queue, dbType string) *Worker {
 	var taskDb store.Store[task.Task]
 
@@ -34,7 +41,12 @@ func NewWorker(name string, Queue queue.Queue, dbType string) *Worker {
 	case "memory": 
 		taskDb = store.NewInMemoryStore[task.Task]()
 	case "persistent": 
-		persistentTaskDb, err := store.NewPersistentStore[task.Task](0600, fmt.Sprintf("worker_%s.db", name), "tasks")
+		db, err := bolt.Open(WorkerDbPath, WorkerDbFileMode, nil)
+		if (err != nil) {
+			log.Fatalf("Error creating the persistent DB for manager: %v\n", err)
+		}
+
+		persistentTaskDb, err := store.NewPersistentStore[task.Task](db, name + "_tasks")
 		if (err != nil) {
 			log.Fatalf("Error creating the persistent task DB: %v\n", err)
 		}
@@ -67,7 +79,7 @@ func (w *Worker) runTask() docker.DockerResult {
 
 	// New task added to the worker
 	// No entry in DB 
-	if (err == nil && taskPersisted == nil) {
+	if (taskPersisted == nil) {
 		taskPersisted = &taskQueued
 		w.taskDb.Put(taskQueued.ID.String(), taskPersisted)
 	// Error reading from DB 
