@@ -197,7 +197,12 @@ func (m *Manager) getWorkerClient(workerId uuid.UUID) (*http.Client, error) {
 }
 
 func (m *Manager) AddWorkerAndClient(w worker.Worker, client *http.Client) {
-	m.Workers = append(m.Workers, w.Uuid)
+	_, ok := m.WorkerTaskMap[w.Uuid]
+	// Worker already stored in the map 
+	if (!ok) {
+		m.Workers = append(m.Workers, w.Uuid)
+	}
+
 	m.WorkerClientMap[w.Uuid] = client
 	m.WorkerNameDb.Put(w.Uuid.String(), &w.Name)
 }
