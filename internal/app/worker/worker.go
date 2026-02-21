@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/e-hua/netbula/internal/docker"
@@ -22,11 +23,11 @@ type Worker struct {
 	// TODO: Implement a generic queue 
 	// Represents the "desired states" of tasks
 	Queue queue.Queue
-	// TODO: Use a persistent DB to store the tasks 
-	// Represents the "current states" of tasks
 	
 	// Should not be accessible outside the worker package
 	taskDb store.Store[task.Task]
+
+	mutex sync.RWMutex
 }
 
 const (
@@ -61,10 +62,41 @@ func NewWorker(uuid uuid.UUID, name string, Queue queue.Queue, dbType string) *W
 	}
 }
 
-func (w *Worker) CollectStats() {
-	fmt.Println("Stats collected!")
+// Execute task transition if possible 
+// Throw error in DockerResult if transition is invalid 
+func (w *Worker) transitionTask(taskQueued task.Task) docker.DockerResult {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	
+	taskPersisted, err := w.taskDb.Get(taskQueued.ID.String())
+	// Error reading from DB 
+	if (err != nil) {
+		log.Printf("Error getting the task from Task DB: %s", err.Error())
+		return docker.DockerResult{Error: err}
+	}
+	// New task added to the worker
+	// No entry in DB 
+	if (taskPersisted == nil) {
+		taskPersisted = &taskQueued
+		w.taskDb.Put(taskQueued.ID.String(), taskPersisted)
+	}
+
+	if (!task.ValidStateTransition(taskPersisted.State, taskQueued.State)) {
+		return docker.DockerResult{Error: fmt.Errorf("invalid transition")}	
+	}
+
+	switch taskQueued.State {
+	case task.Scheduled:
+		return w.StartTask(taskQueued)
+	case task.Completed: 
+		return w.StopTask(taskQueued)
+	default: 
+		return docker.DockerResult{ Error: errors.New("Unsupported state, not implemented yet") }
+	}
 }
 
+// Dequeue from the queue of pending tasks
+// And execute task (starting or stopping the task)
 func (w *Worker) runTask() docker.DockerResult {
 	targetTask := w.Queue.Dequeue()	
 	if (targetTask == nil) {
@@ -72,43 +104,10 @@ func (w *Worker) runTask() docker.DockerResult {
 		return docker.DockerResult{Error: nil}
 	}
 
-
 	// Type assertion: Panic if it's not of type Task
 	taskQueued := targetTask.(task.Task)	
-	taskPersisted, err := w.taskDb.Get(taskQueued.ID.String())
 
-	// New task added to the worker
-	// No entry in DB 
-	if (taskPersisted == nil) {
-		taskPersisted = &taskQueued
-		w.taskDb.Put(taskQueued.ID.String(), taskPersisted)
-	// Error reading from DB 
-	} else if (err != nil) {
-		log.Printf("Error getting the task from Task DB: %s", err.Error())
-		return docker.DockerResult{Error: err}
-	}
-
-	var result docker.DockerResult
-	if (task.ValidStateTransition(taskPersisted.State, taskQueued.State)) {
-		switch taskQueued.State {
-
-		case task.Scheduled:
-			result = w.StartTask(taskQueued)
-		case task.Completed: 
-			result = w.StopTask(taskQueued)
-		default: 
-			result.Error = errors.New("Not implemented yet")
-		}
-	} else {
-		err := fmt.Errorf(
-			"Invalid transition from %v to %v", 
-			taskPersisted.State,
-			taskQueued.State,
-		)
-		result.Error = err
-	}
-
-	return result
+	return w.transitionTask(taskQueued)
 }
 
 func (w *Worker) StartTask(taskToStart task.Task) docker.DockerResult {
@@ -161,7 +160,15 @@ func (w *Worker) StopTask(taskToStop task.Task) docker.DockerResult {
 }
 
 func (w *Worker) AddTask(taskToAdd task.Task) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 	w.Queue.Enqueue(taskToAdd)
+}
+
+func (w *Worker) GetTasks() ([]*task.Task, error) {
+	w.mutex.RLock()
+	defer w.mutex.RUnlock()
+	return w.taskDb.List()
 }
 
 func (w *Worker) RunTasksForever() {
