@@ -34,7 +34,7 @@ const (
 	WorkerDbFileMode os.FileMode = 0600
 )
 
-func NewWorker(name string, Queue queue.Queue, dbType string) *Worker {
+func NewWorker(uuid uuid.UUID, name string, Queue queue.Queue, dbType string) *Worker {
 	var taskDb store.Store[task.Task]
 
 	switch (dbType) {
@@ -55,7 +55,7 @@ func NewWorker(name string, Queue queue.Queue, dbType string) *Worker {
 
 	return &Worker {
 		Name: name,
-		Uuid: uuid.New(),
+		Uuid: uuid,
 		Queue: Queue,
 		taskDb: taskDb,
 	}
