@@ -63,7 +63,7 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 
 // GET localhost:<Port>/tasks
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	tasks, err := a.Manager.TaskDb.List()
+	tasks, err := a.Manager.State.TaskDb.List()
 	if (err != nil) {
 		routers.RespondError(responseWriter, http.StatusInternalServerError, err.Error())
 	}
@@ -87,7 +87,7 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 	parsedId, _	:= uuid.Parse(taskId)
 	fmt.Printf("Parsed Id: %v\n", parsedId)
 
-	taskToStop, err := a.Manager.TaskDb.Get(parsedId.String())
+	taskToStop, err := a.Manager.State.TaskDb.Get(parsedId.String())
 	if (err != nil) {
 		message := fmt.Sprintf("No task with ID %v found in storage\n", parsedId)
 		routers.RespondError(responseWriter, 404, message)
