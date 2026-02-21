@@ -10,6 +10,7 @@ import (
 	"github.com/e-hua/netbula/internal/configs"
 	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/golang-collections/collections/queue"
+	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
 )
 
@@ -39,6 +40,7 @@ func main() {
 	var address string 
 	var tlsToken string 
 	var workerName string 
+	var workerUuid uuid.UUID
 
 	if (len(os.Args) < 4) {
 		workerConfig, err := configs.GetConfigFromFile[configs.WorkerConfig](WorkerConfigDirPath, WorkerConfigFileName)
@@ -52,19 +54,22 @@ func main() {
 		address = workerConfig.ManagerAddress
 		tlsToken = workerConfig.TlsToken
 		workerName = workerConfig.WorkerName
+		workerUuid = workerConfig.Uuid
 	} else {
 		address = os.Args[1];
 		tlsToken = os.Args[2]			
 		workerName = os.Args[3]
 
-		workerConfig := configs.NewWorkerConfig(workerName, address, tlsToken)
+		workerConfig := configs.NewWorkerConfig(uuid.New(), workerName, address, tlsToken)
 		err := configs.StoreConfigToFile(WorkerConfigDirPath, WorkerConfigFileName, workerConfig)
 		if (err != nil) {
 			log.Fatalf("Error storing config to the disk: %v", err)
 		}
+
+		workerUuid = workerConfig.Uuid
 	}
 
-	newWorker := worker.NewWorker(workerName, *queue.New(), "persistent")
+	newWorker := worker.NewWorker(workerUuid, workerName, *queue.New(), "persistent")
 
 	tlsConfig := security.GetWorkerTlsConfig(tlsToken)
 
