@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -36,42 +37,26 @@ func connectAndCreateSession(address string, tlsConfig *tls.Config) (*yamux.Sess
 	return session, nil
 }
 
+type argsParsedResult struct {
+	managerAddress string
+	tlsToken string	
+	workerName string
+}
+
 func main() {
-	var address string 
-	var tlsToken string 
-	var workerName string 
-	var workerUuid uuid.UUID
+	parsedArgs, err := parseWorkerArgs(os.Args)
+	workerConfigs := setupWorkerConfig(parsedArgs, err)
 
-	if (len(os.Args) < 4) {
-		workerConfig, err := configs.GetConfigFromFile[configs.WorkerConfig](WorkerConfigDirPath, WorkerConfigFileName)
-		if (err != nil) {
-			log.Fatal(
-				"Not enough arguments and cannot find configs in disk, program must be called with " +  
-				"go run main.go <manager_ip_address>:<port_number> <tls_token> <worker_name>",
-				);
-		}
-
-		address = workerConfig.ManagerAddress
-		tlsToken = workerConfig.TlsToken
-		workerName = workerConfig.WorkerName
-		workerUuid = workerConfig.Uuid
-	} else {
-		address = os.Args[1];
-		tlsToken = os.Args[2]			
-		workerName = os.Args[3]
-
-		workerConfig := configs.NewWorkerConfig(uuid.New(), workerName, address, tlsToken)
-		err := configs.StoreConfigToFile(WorkerConfigDirPath, WorkerConfigFileName, workerConfig)
-		if (err != nil) {
-			log.Fatalf("Error storing config to the disk: %v", err)
-		}
-
-		workerUuid = workerConfig.Uuid
-	}
+	var address string = workerConfigs.ManagerAddress
+	var tlsToken string = workerConfigs.TlsToken
+	var workerName string = workerConfigs.WorkerName
+	var workerUuid uuid.UUID = workerConfigs.Uuid
 
 	newWorker := worker.NewWorker(workerUuid, workerName, *queue.New(), "persistent")
-
 	tlsConfig := security.GetWorkerTlsConfig(tlsToken)
+
+	go newWorker.RunTasksForever()
+	go newWorker.UpdateTaskStatsForever()
 
 	for {
 		session, err := connectAndCreateSession(address, tlsConfig)
@@ -86,9 +71,55 @@ func main() {
 			Worker: newWorker,
 		}
 
-		go newWorker.RunTasksForever()
-		go newWorker.UpdateTaskStatsForever()
 		// This is a blocking call
 		api.Start()
 	}
+}
+
+func parseWorkerArgs(args []string) (*argsParsedResult, error) {
+	if (len(args) < 4) {
+		return &argsParsedResult{}, fmt.Errorf("Not enough number of args")
+	} 
+
+	return &argsParsedResult{
+		managerAddress: args[0],
+		tlsToken: args[1],
+		workerName: args[2],
+	}, nil
+}
+
+func setupWorkerConfig(parsedResult *argsParsedResult, parseErr error) *configs.WorkerConfig {
+	workerConfig, err := configs.GetConfigFromFile[configs.WorkerConfig](WorkerConfigDirPath, WorkerConfigFileName)
+	hasExistingConfig := (err == nil)
+
+	// If parse failed 
+	if (parseErr != nil)	{
+		if (!hasExistingConfig)	{
+			log.Fatal(
+				"Not enough arguments and cannot find configs in disk, program must be called with " +  
+				"go run main.go <manager_ip_address>:<port_number> <tls_token> <worker_name>",
+				);
+		}
+		return workerConfig
+	}
+
+	// Parse successful, valid parsedResult 
+
+	// No existing(previous) configs 
+	// Need to create new ones
+	if (!hasExistingConfig) {
+		workerConfig = configs.NewWorkerConfig(uuid.New(), parsedResult.workerName, parsedResult.managerAddress, parsedResult.tlsToken)
+	// Need to update old ones
+	} else {
+		workerConfig.ManagerAddress = parsedResult.managerAddress	
+		workerConfig.TlsToken = parsedResult.tlsToken	
+		workerConfig.WorkerName = parsedResult.workerName
+	}
+	
+	err = configs.StoreConfigToFile(WorkerConfigDirPath, WorkerConfigFileName, workerConfig)
+	if (err != nil) {
+		log.Fatalf("Error storing config to the disk: %v", err)
+	}
+
+	return workerConfig
 }
