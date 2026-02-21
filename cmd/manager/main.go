@@ -63,7 +63,7 @@ func connectAndCreateHttpClient(listener net.Listener) (*http.Client, error) {
 // Returns an array of ints with length of 2
 // First one is the port worker is going to connect to 
 // Second one is the port the user is going to call the manager server 
-func parseWorkerArgs(args []string) ([2]int, error) {
+func parseManagerArgs(args []string) ([2]int, error) {
 	if (len(args) < 3) {
 		return [2]int{}, fmt.Errorf("Not enough number of args")
 	} 
@@ -132,7 +132,7 @@ func waitForWorkersForever(listener net.Listener, newManager *manager.Manager) {
 }
 
 func main() {
-	ports, err := parseWorkerArgs(os.Args)
+	ports, err := parseManagerArgs(os.Args)
 	cfg := setupConfig(ports, err)
 
 	formattedPort := fmt.Sprintf(":%d", cfg.WorkerConnectionPort)
