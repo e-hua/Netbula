@@ -1,4 +1,4 @@
-package main
+package manager
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/e-hua/netbula/internal/app/manager"
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/configs"
 	"github.com/e-hua/netbula/internal/networks/security"
@@ -64,18 +63,18 @@ func connectAndCreateHttpClient(listener net.Listener) (*http.Client, error) {
 // First one is the port worker is going to connect to 
 // Second one is the port the user is going to call the manager server 
 func parseManagerArgs(args []string) ([2]int, error) {
-	if (len(args) < 3) {
+	if (len(args) < 2) {
 		return [2]int{}, fmt.Errorf("Not enough number of args")
 	} 
 	
-	workerConnectionPort, err := strconv.Atoi(os.Args[1])
+	workerConnectionPort, err := strconv.Atoi(os.Args[0])
 	if (err != nil) {
-		return [2]int{}, fmt.Errorf("Invalid port number for the connection with workers: %s", os.Args[1])
+		return [2]int{}, fmt.Errorf("Invalid port number for the connection with workers: %s", os.Args[0])
 	}
 
-	managerServerApiPort, err := strconv.Atoi(os.Args[2])
+	managerServerApiPort, err := strconv.Atoi(os.Args[1])
 	if (err != nil) {
-		return [2]int{}, fmt.Errorf("Invalid port number for manager API: %s", os.Args[2])
+		return [2]int{}, fmt.Errorf("Invalid port number for manager API: %s", os.Args[1])
 	}
 
 	return [2]int{workerConnectionPort, managerServerApiPort}, nil
@@ -100,15 +99,19 @@ func setupConfig(ports [2]int, parseErr error) *configs.ManagerConfig {
 		cert, token := security.GenerateManagerIdentity()
 		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token)
 	} else {
-		config.WorkerConnectionPort = newWorkerConnectionPort
-		config.ServerApiPort = newManagerServerApiPort
+		if (newWorkerConnectionPort != 0) {
+			config.WorkerConnectionPort = newWorkerConnectionPort
+		}
+		if (newManagerServerApiPort != 0) {
+			config.ServerApiPort = newManagerServerApiPort
+		}
 	}
 
 	configs.StoreConfigToFile(ManagerConfigDirPath, ManagerConfigFileName, config)
 	return config
 }
 
-func waitForWorkersForever(listener net.Listener, newManager *manager.Manager) {
+func waitForWorkersForever(listener net.Listener, newManager *Manager) {
 	for {
 		httpClient, err := connectAndCreateHttpClient(listener)
 		if (err != nil) {
@@ -125,15 +128,14 @@ func waitForWorkersForever(listener net.Listener, newManager *manager.Manager) {
 		json.NewDecoder(resp.Body).Decode(workerInfo)
 	
 		fmt.Printf("Connected worker name: %v\n", workerInfo.Name)
-		newManager.AddWorkerAndClient(*workerInfo, httpClient)
+		newManager.WorkerCluster.AddClient(workerInfo.Uuid, httpClient)
 
 		newManager.UpdateWorkerNodes()
 	}	
 }
 
-func main() {
-	ports, err := parseManagerArgs(os.Args)
-	cfg := setupConfig(ports, err)
+func Run(ports [2]int) {
+	cfg := setupConfig(ports, nil)
 
 	formattedPort := fmt.Sprintf(":%d", cfg.WorkerConnectionPort)
 	listener := createTlsListener(
@@ -144,8 +146,8 @@ func main() {
 		cfg.TlsToken, formattedPort,
 	)
 
-	newManager := manager.New(&scheduler.Epvm{}, "persistent");
-	managerApi := manager.Api{Manager: newManager, Port: cfg.ServerApiPort}
+	newManager := New(&scheduler.Epvm{}, "persistent");
+	managerApi := Api{Manager: newManager, Port: cfg.ServerApiPort}
 
 	go newManager.SendTasksForever()
 	go newManager.UpdateTasksForever()

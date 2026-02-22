@@ -1,13 +1,11 @@
-package main
+package worker
 
 import (
 	"crypto/tls"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
-	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/configs"
 	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/golang-collections/collections/queue"
@@ -43,8 +41,8 @@ type argsParsedResult struct {
 	workerName string
 }
 
-func main() {
-	parsedArgs, err := parseWorkerArgs(os.Args)
+func Run(managerAddr string, token string, name string) {
+	parsedArgs, err := parseWorkerArgs([]string{managerAddr, token, name})
 	workerConfigs := setupWorkerConfig(parsedArgs, err)
 
 	var address string = workerConfigs.ManagerAddress
@@ -52,7 +50,7 @@ func main() {
 	var workerName string = workerConfigs.WorkerName
 	var workerUuid uuid.UUID = workerConfigs.Uuid
 
-	newWorker := worker.NewWorker(workerUuid, workerName, *queue.New(), "persistent")
+	newWorker := NewWorker(workerUuid, workerName, *queue.New(), "persistent")
 	tlsConfig := security.GetWorkerTlsConfig(tlsToken)
 
 	go newWorker.RunTasksForever()
@@ -66,7 +64,7 @@ func main() {
 			continue
 		}
 
-		api := worker.Api{
+		api := Api{
 			Session: session,	
 			Worker: newWorker,
 		}
@@ -77,7 +75,7 @@ func main() {
 }
 
 func parseWorkerArgs(args []string) (*argsParsedResult, error) {
-	if (len(args) < 4) {
+	if (len(args) < 3) {
 		return &argsParsedResult{}, fmt.Errorf("Not enough number of args")
 	} 
 
@@ -108,12 +106,21 @@ func setupWorkerConfig(parsedResult *argsParsedResult, parseErr error) *configs.
 	// No existing(previous) configs 
 	// Need to create new ones
 	if (!hasExistingConfig) {
+		if (parsedResult.managerAddress	!= "" || parsedResult.tlsToken != "" || parsedResult.workerName != "") {
+			log.Fatalf("Not existing config, and missing flags: %v", err)
+		}
 		workerConfig = configs.NewWorkerConfig(uuid.New(), parsedResult.workerName, parsedResult.managerAddress, parsedResult.tlsToken)
 	// Need to update old ones
 	} else {
-		workerConfig.ManagerAddress = parsedResult.managerAddress	
-		workerConfig.TlsToken = parsedResult.tlsToken	
-		workerConfig.WorkerName = parsedResult.workerName
+		if (parsedResult.managerAddress	!= "") {
+			workerConfig.ManagerAddress = parsedResult.managerAddress	
+		}
+		if (parsedResult.tlsToken	!= "") {
+			workerConfig.TlsToken = parsedResult.tlsToken	
+		}
+		if (parsedResult.workerName	!= "") {
+			workerConfig.WorkerName = parsedResult.workerName
+		}
 	}
 	
 	err = configs.StoreConfigToFile(WorkerConfigDirPath, WorkerConfigFileName, workerConfig)
