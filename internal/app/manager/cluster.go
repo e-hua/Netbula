@@ -326,3 +326,16 @@ func (cluster *Cluster) createWorkerClientMapCopy() map[uuid.UUID]*http.Client {
 	return clientsCopy
 }
 
+func (cluster *Cluster) GetNodes() []node.Node {
+	cluster.mutex.RLock()
+	defer cluster.mutex.RUnlock()
+
+	copiedNodes := make([]node.Node, 0, len(cluster.WorkerNodes))
+
+	for _, node := range(cluster.WorkerNodes) {
+		copiedNode := *node
+		copiedNodes = append(copiedNodes, copiedNode)
+	}
+
+	return copiedNodes
+}

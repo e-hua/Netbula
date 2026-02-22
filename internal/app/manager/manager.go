@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/e-hua/netbula/internal/app/worker"
+	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/scheduler"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/golang-collections/collections/queue"
@@ -198,4 +199,8 @@ func (m *Manager) SendTasksForever() {
 			m.SendWork()
 		}
 	}
+}
+
+func (m *Manager) GetNodes() []node.Node {
+	return m.WorkerCluster.GetNodes() 
 }

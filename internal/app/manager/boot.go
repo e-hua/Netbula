@@ -138,20 +138,21 @@ func Run(ports [2]int) {
 	cfg := setupConfig(ports, nil)
 
 	formattedPort := fmt.Sprintf(":%d", cfg.WorkerConnectionPort)
-	listener := createTlsListener(
-		tls.Certificate{
+	cert := tls.Certificate{
 			Certificate: cfg.TlsCertificateInBytes,
 			PrivateKey: ed25519.PrivateKey(cfg.TlsPrivateKey),
-		}, 
-		cfg.TlsToken, formattedPort,
+	}
+
+	listener := createTlsListener(
+		cert, cfg.TlsToken, formattedPort,
 	)
 
 	newManager := New(&scheduler.Epvm{}, "persistent");
-	managerApi := Api{Manager: newManager, Port: cfg.ServerApiPort}
+	managerApi := Api{Manager: newManager, Port: cfg.ServerApiPort, TlsToken: cfg.TlsToken}
 
 	go newManager.SendTasksForever()
 	go newManager.UpdateTasksForever()
-	go managerApi.Start()
+	go managerApi.Start(cert)
 
 	waitForWorkersForever(listener, newManager)
 }
