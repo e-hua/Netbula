@@ -4,10 +4,18 @@
 
 ## Where to start
 
-- Build: `go build -o bin/manager ./cmd/manager & go build -o bin/worker ./cmd/worker`
+- Build: `go build -o bin/netbula main.go`
 
-- Run the manager program: `./bin/manager <port_number_for_worker_connection> <port_number_for_manager_api>`
-- Run the worker program: `./bin/worker <manager_ip_address>:<port_number_for_worker_connection> <tls_token> <worker_name>`
+- Run the manager program for the first time:
+  `bin/netbula manager \ 
+--worker-port <port_number_for_worker_connection> \
+--api-port <port_number_for_manager_api>`
+
+- Run the worker program:
+  `bin/netbula worker \
+--manager <manager_ip_address>:<port_number_for_worker_connection> \
+--token <tls_token> \
+--name <worker_name>`
 
 ## How to test manually
 
@@ -25,4 +33,4 @@ localhost:<port_number_for_manager_api>/tasks`
 
 ### Get all tasks
 
-- `curl -v localhost:9999/tasks|jq`
+- `curl -v localhost:<port_number_for_manager_api>/tasks|jq`
