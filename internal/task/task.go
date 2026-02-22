@@ -23,6 +23,23 @@ const (
 	Failed
 )
 
+func (s State) String() string {
+	switch s {
+	case Pending:
+		return "PENDING"
+	case Scheduled:
+		return "SCHEDULED"
+	case Running:
+		return "RUNNING"
+	case Completed:
+		return "COMPLETED"
+	case Failed:
+		return "FAILED"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // Think of this as an adjacent list 
 // In the graph representing the state machine
 var stateTransitionMap = map[State][]State {
