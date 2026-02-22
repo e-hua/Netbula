@@ -17,6 +17,11 @@
 --token <tls_token> \
 --name <worker_name>`
 
+- Initialize the ctl program:
+  `bin/netbula control \
+--manager-address <manager_ip_address>:<port_number_for_manager_api> \
+--token <tls_token>`
+
 ## How to test manually
 
 ### Start a task
