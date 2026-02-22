@@ -1,12 +1,15 @@
 package manager
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/e-hua/netbula/internal/networks/security"
+	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/e-hua/netbula/lib/routers"
 	"github.com/go-chi/chi/v5"
@@ -19,11 +22,13 @@ type Api struct {
 	Port int
 	Manager	*Manager
 	Router *chi.Mux
+	TlsToken string
 }
 
 func (a *Api) initRouter() {
 	a.Router = chi.NewRouter()
 	a.Router.Use(middleware.Logger)
+	a.Router.Use(a.Authenticate)
 
 	a.Router.Route("/tasks", func (r chi.Router) {
 		r.Post("/", a.StartTaskHandler)
@@ -32,12 +37,34 @@ func (a *Api) initRouter() {
 			r.Delete("/", a.StopTaskHandler)
 		})		
 	})
+
+	a.Router.Route("/nodes", func (r chi.Router) {
+		r.Get("/", a.GetNodesHandler)
+	})
 }
 
-func (a *Api) Start() {
-	a.initRouter()
+func (a *Api) Authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("X-Netbula-Token")
+		if token != a.TlsToken {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
-	http.ListenAndServe(fmt.Sprintf("localhost:%d", a.Port), a.Router)
+func (a *Api) Start(certs tls.Certificate) {
+	a.initRouter()
+	tlsConfig := security.GetManagerTlsConfig(certs)
+	server := &http.Server{
+		Addr:      fmt.Sprintf("0.0.0.0:%d", a.Port),
+		Handler:   a.Router,
+		TLSConfig: tlsConfig,
+	}
+
+	log.Printf("Manager API (Secure) listening on %d\n", a.Port)
+	log.Fatal(server.ListenAndServeTLS("", ""))
 }
 
 // POST localhost:<Port>/tasks
@@ -108,4 +135,14 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 	a.Manager.AddTaskEvent(stopTaskEvent)
 	
 	responseWriter.WriteHeader(204)
+}
+
+// GET localhost:<Port>/nodes
+func (a *Api) GetNodesHandler(responseWriter http.ResponseWriter, request *http.Request) {
+	nodes := a.Manager.GetNodes()
+	if (nodes == nil)	{
+		nodes = []node.Node{}
+	}
+
+	routers.RespondJSON(responseWriter, http.StatusOK, nodes)
 }
