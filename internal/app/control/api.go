@@ -48,6 +48,7 @@ func StartTask(managerAddress string, token string, taskData []byte) {
 
 	defer resp.Body.Close()
 	log.Println("Successfully sent task request to manager")
+	log.Println("Might take the manager some time to assign the task to a worker")
 }
 
 // GET {manager_address}/tasks
@@ -105,7 +106,8 @@ func StopTask(managerAddress string, token string, taskId string) {
 		return 
 	}
 
-	log.Printf("Task %v has been stopped.", taskId)
+	log.Printf("The command to stop task %v has been sent to the manager.", taskId)
+	log.Println("Might take the manager and worker some time to stop the task")
 }
 
 // GET {manager_address}/nodes
