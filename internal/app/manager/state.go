@@ -96,7 +96,7 @@ func (state *State) rehydrate() {
 	for _, taskWorkerEntry := range(taskWorkerEntries) {
 		taskUuid, err := uuid.Parse(taskWorkerEntry.Key)
 		if (err != nil) {
-			log.Printf("Error parsing the task UUID from the DB")
+			log.Printf("Error parsing the task UUID from the TaskWorker DB")
 			continue
 		}
 
@@ -108,6 +108,25 @@ func (state *State) rehydrate() {
 		}
 
 		assignedTaskSlice = append(assignedTaskSlice, taskUuid)
+		workerTaskMap[workerUuid] = assignedTaskSlice
+	}
+
+	workerNameEntries, err := state.WorkerNameDb.Entries()
+	if (err != nil) {
+		log.Printf("Error getting entries in the db mapping worker UUID to worker names")
+		workerNameEntries = make([]store.Entry[string], 0)
+	}
+
+	for _, workerNameEntry := range(workerNameEntries) {
+		workerUuid, err := uuid.Parse(workerNameEntry.Key)
+		if (err != nil) {
+			log.Printf("Error parsing the task UUID from the WorkerNameDb")
+			continue
+		}
+		assignedTaskSlice, ok := workerTaskMap[workerUuid]
+		if (!ok) {
+			assignedTaskSlice = make([]uuid.UUID, 0)
+		}
 		workerTaskMap[workerUuid] = assignedTaskSlice
 	}
 
