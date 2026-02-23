@@ -17,25 +17,27 @@
 --token <tls_token> \
 --name <worker_name>`
 
-- Initialize the ctl program:
-  `bin/netbula control \
+## How to use the control program to get info from your manager instance
+
+### Initialize the ctl program:
+
+`bin/netbula control \
 --manager-address <manager_ip_address>:<port_number_for_manager_api> \
 --token <tls_token>`
 
-## How to test manually
-
 ### Start a task
 
-- `curl -v --request POST \
-header 'Content-Type: application/json' \
---data @demo/startTask.json \
-localhost:<port_number_for_manager_api>/tasks`
+`bin/netbula control run \
+--filename <fileName>(Example: demo/startTask.json)`
 
 ### Delete a task
 
-- `curl -v --request DELETE \
-'localhost:<port_number_for_manager_api>/tasks/21b23589-5d2d-4731-b5c9-a97e9832d021'`
+`bin/netbula control stop <taskUuid>(Example: 21b23589-5d2d-4731-b5c9-a97e9832d021)`
 
 ### Get all tasks
 
-- `curl -v localhost:<port_number_for_manager_api>/tasks|jq`
+`bin/netbula tasks`
+
+### Get all nodes
+
+`bin/netbula nodes`
