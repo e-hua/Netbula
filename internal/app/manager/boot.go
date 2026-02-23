@@ -130,6 +130,9 @@ func waitForWorkersForever(listener net.Listener, newManager *Manager) {
 		fmt.Printf("Connected worker name: %v\n", workerInfo.Name)
 		newManager.WorkerCluster.AddClient(workerInfo.Uuid, httpClient)
 
+		fmt.Printf("Registering worker with Name: %s, ID: %v\n", workerInfo.Name ,workerInfo.Uuid)
+		newManager.State.RegisterWorker(workerInfo.Uuid, workerInfo.Name)
+
 		newManager.UpdateWorkerNodes()
 	}	
 }
