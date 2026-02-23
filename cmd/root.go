@@ -1,6 +1,5 @@
 /*
 Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
@@ -10,18 +9,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
-
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "netbula",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "Yet another container orchestrator",
+	Long: `
+Netbula is a distributed container orchestration system designed for simplicity. 
+It provides a robust platform for scheduling, deploying, 
+and managing dockerized tasks across a cluster of worker nodes.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+Key Components:
+  netbula manager: Responsible for task scheduling, 
+           state persistence, and monitoring worker health.
+  netbula worker:  Connects to the manager, manages 
+           local Docker containers, and reports task status.
+  netbula control: The user interface. A CLI tool for developers to interact 
+           with the manager API to run, stop, and monitor tasks and worker nodes.
+	`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
