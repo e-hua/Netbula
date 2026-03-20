@@ -12,18 +12,18 @@ import (
 type Node struct {
 	Name string
 
-	Cores int 
+	Cores             int
 	CpuAveragePercent float64
-	CpuAverageLoad float64
+	CpuAverageLoad    float64
 
-	Memory int 
+	Memory                 int
 	MemoryAllocatedPercent float64
 
-	Disk int 
-	DiskAllocatedPercent float64 
+	Disk                 int
+	DiskAllocatedPercent float64
 
-	Role string
-	TaskCount int 
+	Role      string
+	TaskCount int
 
 	WorkerUuid uuid.UUID
 }
@@ -31,13 +31,13 @@ type Node struct {
 func (node *Node) PrintNode() {
 	fmt.Printf("Worker node [%v] status: \n", node.Name)
 	log.Printf(
-		"RAM: %.2f GB, RAM usage: %.2f%%, Disk: %.2f GB, Disk usage: %.2f%%, CPU: %d cores, Average CPU usage: %.2f%%, CPU load index: %v\n\n", 
-		float64(node.Memory) / float64(types.GigabyteInBytes), 
+		"RAM: %.2f GB, RAM usage: %.2f%%, Disk: %.2f GB, Disk usage: %.2f%%, CPU: %d cores, Average CPU usage: %.2f%%, CPU load index: %v\n\n",
+		float64(node.Memory)/float64(types.GigabyteInBytes),
 		node.MemoryAllocatedPercent,
-		float64(node.Disk) / float64(types.GigabyteInBytes), 
+		float64(node.Disk)/float64(types.GigabyteInBytes),
 		node.DiskAllocatedPercent,
 		node.Cores,
 		node.CpuAveragePercent,
-		node.CpuAverageLoad / float64(node.Cores),
+		node.CpuAverageLoad/float64(node.Cores),
 	)
 }

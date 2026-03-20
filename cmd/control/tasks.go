@@ -19,9 +19,9 @@ import (
 func printTasksInTable(tasks []*task.Task) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 	fmt.Fprintln(w, "ID\tNAME\tCREATED\tSTATE\tCONTAINER NAME\tIMAGE\t")
-	for _, task := range(tasks) {
+	for _, task := range tasks {
 		var startTime string
-		if (task.StartTime.IsZero()) {
+		if task.StartTime.IsZero() {
 			startTime = fmt.Sprintf(
 				"%s ago",
 				units.HumanDuration(time.Now().UTC().Sub(time.Now().UTC())),
@@ -35,13 +35,13 @@ func printTasksInTable(tasks []*task.Task) {
 
 		taskState := task.State.String()
 		fmt.Fprintf(
-			w, 
-			"%s\t%s\t%s\t%s\t%s\t%s\t\n", 
-			task.ID, 
+			w,
+			"%s\t%s\t%s\t%s\t%s\t%s\t\n",
+			task.ID,
 			task.Name,
-			startTime, 
-			taskState, 
-			task.Name, 
+			startTime,
+			taskState,
+			task.Name,
 			task.Image,
 		)
 	}
@@ -56,7 +56,7 @@ var TasksCmd = &cobra.Command{
 	List and show all the tasks in the manager 
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Read the configs from the config file 
+		// Read the configs from the config file
 		storedConfigs := ctl.Run("", "")
 		tasks := ctl.GetTasks(storedConfigs.ManagerServerAddress, storedConfigs.ControlToken)
 		printTasksInTable(tasks)

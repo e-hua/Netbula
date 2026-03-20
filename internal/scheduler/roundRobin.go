@@ -7,8 +7,8 @@ import (
 )
 
 type RoundRobin struct {
-	Name string
-	LastWorkerIdx int 
+	Name          string
+	LastWorkerIdx int
 }
 
 func (r *RoundRobin) SelectCandidateNodes(t task.Task, nodes []*node.Node) []*node.Node {
@@ -21,7 +21,7 @@ func (r *RoundRobin) Score(t task.Task, nodes []*node.Node) map[uuid.UUID]float6
 	newWorkerIdx := (r.LastWorkerIdx + 1) % len(nodes)
 	r.LastWorkerIdx = newWorkerIdx
 
-	for idx, node := range(nodes) {
+	for idx, node := range nodes {
 		if idx == newWorkerIdx {
 			nodeScores[node.WorkerUuid] = 0.1
 		} else {
@@ -32,16 +32,16 @@ func (r *RoundRobin) Score(t task.Task, nodes []*node.Node) map[uuid.UUID]float6
 	return nodeScores
 }
 
-// Pick the node with lowest score 
+// Pick the node with lowest score
 func (r *RoundRobin) Pick(scores map[uuid.UUID]float64, candidates []*node.Node) *node.Node {
-	var bestNode *node.Node 
+	var bestNode *node.Node
 	var lowestScore float64
 
-	for idx, node := range(candidates) {
-		if (idx == 0)	{
+	for idx, node := range candidates {
+		if idx == 0 {
 			bestNode = node
-			lowestScore = scores[node.WorkerUuid]	
-		} else if (scores[node.WorkerUuid] < lowestScore) {
+			lowestScore = scores[node.WorkerUuid]
+		} else if scores[node.WorkerUuid] < lowestScore {
 			bestNode = node
 			lowestScore = scores[node.WorkerUuid]
 		}
@@ -49,4 +49,3 @@ func (r *RoundRobin) Pick(scores map[uuid.UUID]float64, candidates []*node.Node)
 
 	return bestNode
 }
-

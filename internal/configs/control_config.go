@@ -9,6 +9,6 @@ type ControlConfig struct {
 func NewControlConfig(managerAddress string, token string) *ControlConfig {
 	return &ControlConfig{
 		ManagerServerAddress: managerAddress,
-		ControlToken: token,
+		ControlToken:         token,
 	}
 }

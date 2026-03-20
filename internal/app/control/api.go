@@ -17,7 +17,7 @@ func createCustomHttpsClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true, // Allowing self-signed certs
+				InsecureSkipVerify: true, // Allowing self-signed certs
 			},
 		},
 	}
@@ -26,11 +26,11 @@ func createCustomHttpsClient() *http.Client {
 // POST {manager_address}/tasks
 // Make an API request to the manager to start a task
 func StartTask(managerAddress string, token string, taskData []byte) {
-	log.Printf("Task data sent: %v\n", string(taskData))	
+	log.Printf("Task data sent: %v\n", string(taskData))
 
-	url := fmt.Sprintf("https://%s/tasks", managerAddress)	
+	url := fmt.Sprintf("https://%s/tasks", managerAddress)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(taskData))
-	if (err != nil)	{
+	if err != nil {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
@@ -38,11 +38,11 @@ func StartTask(managerAddress string, token string, taskData []byte) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := createCustomHttpsClient().Do(req)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
 
-	if (resp.StatusCode != http.StatusCreated) { 
+	if resp.StatusCode != http.StatusCreated {
 		log.Printf("Error sending request, response code: %v", resp.StatusCode)
 	}
 
@@ -54,23 +54,23 @@ func StartTask(managerAddress string, token string, taskData []byte) {
 // GET {manager_address}/tasks
 // Make an API request to the manager to get all the tasks
 func GetTasks(managerAddress string, token string) []*task.Task {
-	url := fmt.Sprintf("https://%s/tasks", managerAddress)	
+	url := fmt.Sprintf("https://%s/tasks", managerAddress)
 	req, err := http.NewRequest("GET", url, nil)
-	if (err != nil)	{
+	if err != nil {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
 	req.Header.Set("X-Netbula-Token", token)
 
 	resp, err := createCustomHttpsClient().Do(req)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
 	body, err := io.ReadAll(resp.Body)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
-	if (resp.StatusCode != http.StatusOK) { 
+	if resp.StatusCode != http.StatusOK {
 		log.Printf("Error sending request, response code: %v", resp.StatusCode)
 		log.Printf("Body of response: %s\n", string(body))
 	}
@@ -78,7 +78,7 @@ func GetTasks(managerAddress string, token string) []*task.Task {
 
 	var tasks []*task.Task
 	err = json.Unmarshal(body, &tasks)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
 
@@ -88,22 +88,22 @@ func GetTasks(managerAddress string, token string) []*task.Task {
 // DELETE {manager_address}/tasks/{taskId}
 // Make an API request to the manager to stop the task
 func StopTask(managerAddress string, token string, taskId string) {
-	url := fmt.Sprintf("https://%s/tasks/%s", managerAddress, taskId)	
+	url := fmt.Sprintf("https://%s/tasks/%s", managerAddress, taskId)
 	req, err := http.NewRequest("DELETE", url, nil)
-	if (err != nil)	{
+	if err != nil {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
 	req.Header.Set("X-Netbula-Token", token)
 
 	resp, err := createCustomHttpsClient().Do(req)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
 
-	if (resp.StatusCode != http.StatusNoContent) { 
+	if resp.StatusCode != http.StatusNoContent {
 		log.Printf("Error sending request, response code: %v", resp.StatusCode)
-		return 
+		return
 	}
 
 	log.Printf("The command to stop task %v has been sent to the manager.", taskId)
@@ -113,23 +113,23 @@ func StopTask(managerAddress string, token string, taskId string) {
 // GET {manager_address}/nodes
 // Make an API request to the manager to get all the nodes
 func GetNodes(managerAddress string, token string) []*node.Node {
-	url := fmt.Sprintf("https://%s/nodes", managerAddress)	
+	url := fmt.Sprintf("https://%s/nodes", managerAddress)
 	req, err := http.NewRequest("GET", url, nil)
-	if (err != nil)	{
+	if err != nil {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
 	req.Header.Set("X-Netbula-Token", token)
 
 	resp, err := createCustomHttpsClient().Do(req)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
 	body, err := io.ReadAll(resp.Body)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
-	if (resp.StatusCode != http.StatusOK) { 
+	if resp.StatusCode != http.StatusOK {
 		log.Printf("Error sending request, response code: %v", resp.StatusCode)
 		log.Printf("Body of response: %s\n", string(body))
 	}
@@ -137,7 +137,7 @@ func GetNodes(managerAddress string, token string) []*node.Node {
 
 	var nodes []*node.Node
 	err = json.Unmarshal(body, &nodes)
-	if (err != nil) {
+	if err != nil {
 		log.Panic(err)
 	}
 
