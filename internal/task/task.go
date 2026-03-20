@@ -8,18 +8,18 @@ import (
 	"github.com/moby/moby/api/types/network"
 )
 
-type State int 
+type State int
 
 const (
-	// Initial state for every task 
+	// Initial state for every task
 	Pending State = iota // State = 0
 	// Once the manager has scheduled it onto a worker
-	Scheduled  // Scheduled = 1
+	Scheduled // Scheduled = 1
 	// Once a worker successfully starts the task
-	Running  // ...
-	// Once the task completes its work 
+	Running // ...
+	// Once the task completes its work
 	Completed
-	// If task fails 
+	// If task fails
 	Failed
 )
 
@@ -40,19 +40,19 @@ func (s State) String() string {
 	}
 }
 
-// Think of this as an adjacent list 
+// Think of this as an adjacent list
 // In the graph representing the state machine
-var stateTransitionMap = map[State][]State {
-	Pending: {Scheduled},
+var stateTransitionMap = map[State][]State{
+	Pending:   {Scheduled},
 	Scheduled: {Scheduled, Running, Failed},
-	Running: {Running, Completed, Failed},
+	Running:   {Running, Completed, Failed},
 	Completed: {},
-	Failed: {},
+	Failed:    {},
 }
 
 func contains(states []State, state State) bool {
-	for _, s := range(states) {
-		if (s == state) {
+	for _, s := range states {
+		if s == state {
 			return true
 		}
 	}
@@ -67,47 +67,47 @@ func ValidStateTransition(src State, dest State) bool {
 type Task struct {
 	ID uuid.UUID
 
-	Name string 
-	State State
-	Image string 
-	Cpu float64
-	Memory int 
-	Disk int 
+	Name   string
+	State  State
+	Image  string
+	Cpu    float64
+	Memory int
+	Disk   int
 
-	ExposedPorts network.PortSet
-	PortBindings network.PortMap
+	ExposedPorts  network.PortSet
+	PortBindings  network.PortMap
 	RestartPolicy string
 
-	StartTime time.Time
+	StartTime  time.Time
 	FinishTime time.Time
 
 	ContainerID string
 }
 
 type TaskEvent struct {
-	ID uuid.UUID
+	ID          uuid.UUID
 	TargetState State
-	Timestamp time.Time
-	Task Task
+	Timestamp   time.Time
+	Task        Task
 }
 
 func NewConfig(task *Task) docker.Config {
 	return docker.Config{
 		Name: task.Name,
 
-		AttachStdin: true,
+		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
 
 		ExposedPorts: task.ExposedPorts,
 
-		Cmd: make([] string, 0),
+		Cmd:   make([]string, 0),
 		Image: task.Image,
 
-		Cpu: task.Cpu,
-		Memory: task.Memory,
-		Disk: task.Disk,
-		Env: make([] string, 0),
+		Cpu:           task.Cpu,
+		Memory:        task.Memory,
+		Disk:          task.Disk,
+		Env:           make([]string, 0),
 		RestartPolicy: task.RestartPolicy,
 	}
 }

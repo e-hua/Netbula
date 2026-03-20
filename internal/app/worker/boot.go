@@ -14,20 +14,20 @@ import (
 )
 
 const (
-	WorkerRetryTime = time.Second * 5;
+	WorkerRetryTime = time.Second * 5
 
-	WorkerConfigDirPath = "."
+	WorkerConfigDirPath  = "."
 	WorkerConfigFileName = "worker_config.json"
 )
 
 func connectAndCreateSession(address string, tlsConfig *tls.Config) (*yamux.Session, error) {
 	connection, err := tls.Dial("tcp", address, tlsConfig)
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
 
 	session, err := yamux.Server(connection, nil)
-	if (err != nil) {
+	if err != nil {
 		connection.Close()
 		return nil, err
 	}
@@ -37,8 +37,8 @@ func connectAndCreateSession(address string, tlsConfig *tls.Config) (*yamux.Sess
 
 type argsParsedResult struct {
 	managerAddress string
-	tlsToken string	
-	workerName string
+	tlsToken       string
+	workerName     string
 }
 
 func Run(managerAddr string, token string, name string) {
@@ -58,15 +58,15 @@ func Run(managerAddr string, token string, name string) {
 
 	for {
 		session, err := connectAndCreateSession(address, tlsConfig)
-		if (err != nil) {
+		if err != nil {
 			log.Printf("Connection failed: %v", err)
 			time.Sleep(WorkerRetryTime)
 			continue
 		}
 
 		api := Api{
-			Session: session,	
-			Worker: newWorker,
+			Session: session,
+			Worker:  newWorker,
 		}
 
 		// This is a blocking call
@@ -75,14 +75,14 @@ func Run(managerAddr string, token string, name string) {
 }
 
 func parseWorkerArgs(args []string) (*argsParsedResult, error) {
-	if (len(args) < 3) {
+	if len(args) < 3 {
 		return &argsParsedResult{}, fmt.Errorf("Not enough number of args")
-	} 
+	}
 
 	return &argsParsedResult{
 		managerAddress: args[0],
-		tlsToken: args[1],
-		workerName: args[2],
+		tlsToken:       args[1],
+		workerName:     args[2],
 	}, nil
 }
 
@@ -90,41 +90,41 @@ func setupWorkerConfig(parsedResult *argsParsedResult, parseErr error) *configs.
 	workerConfig, err := configs.GetConfigFromFile[configs.WorkerConfig](WorkerConfigDirPath, WorkerConfigFileName)
 	hasExistingConfig := (err == nil)
 
-	// If parse failed 
-	if (parseErr != nil)	{
-		if (!hasExistingConfig)	{
+	// If parse failed
+	if parseErr != nil {
+		if !hasExistingConfig {
 			log.Fatal(
-				"Not enough arguments and cannot find configs in disk, program must be called with " +  
-				"go run main.go <manager_ip_address>:<port_number> <tls_token> <worker_name>",
-				);
+				"Not enough arguments and cannot find configs in disk, program must be called with " +
+					"go run main.go <manager_ip_address>:<port_number> <tls_token> <worker_name>",
+			)
 		}
 		return workerConfig
 	}
 
-	// Parse successful, valid parsedResult 
+	// Parse successful, valid parsedResult
 
-	// No existing(previous) configs 
+	// No existing(previous) configs
 	// Need to create new ones
-	if (!hasExistingConfig) {
-		if (parsedResult.managerAddress	!= "" || parsedResult.tlsToken != "" || parsedResult.workerName != "") {
+	if !hasExistingConfig {
+		if parsedResult.managerAddress != "" || parsedResult.tlsToken != "" || parsedResult.workerName != "" {
 			log.Fatalf("Not existing config, and missing flags: %v", err)
 		}
 		workerConfig = configs.NewWorkerConfig(uuid.New(), parsedResult.workerName, parsedResult.managerAddress, parsedResult.tlsToken)
-	// Need to update old ones
+		// Need to update old ones
 	} else {
-		if (parsedResult.managerAddress	!= "") {
-			workerConfig.ManagerAddress = parsedResult.managerAddress	
+		if parsedResult.managerAddress != "" {
+			workerConfig.ManagerAddress = parsedResult.managerAddress
 		}
-		if (parsedResult.tlsToken	!= "") {
-			workerConfig.TlsToken = parsedResult.tlsToken	
+		if parsedResult.tlsToken != "" {
+			workerConfig.TlsToken = parsedResult.tlsToken
 		}
-		if (parsedResult.workerName	!= "") {
+		if parsedResult.workerName != "" {
 			workerConfig.WorkerName = parsedResult.workerName
 		}
 	}
-	
+
 	err = configs.StoreConfigToFile(WorkerConfigDirPath, WorkerConfigFileName, workerConfig)
-	if (err != nil) {
+	if err != nil {
 		log.Fatalf("Error storing config to the disk: %v", err)
 	}
 

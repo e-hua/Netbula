@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	ManagerConfigDirPath = "."
+	ManagerConfigDirPath  = "."
 	ManagerConfigFileName = "manager_config.json"
 )
 
@@ -28,28 +28,28 @@ func createTlsListener(cert tls.Certificate, token string, port string) net.List
 	tlsConfig := security.GetManagerTlsConfig(cert)
 
 	listener, err := tls.Listen("tcp", port, tlsConfig)
-	if (err != nil) {
-		log.Fatalf("Error listening to port %s: %v\n", port, err)	
+	if err != nil {
+		log.Fatalf("Error listening to port %s: %v\n", port, err)
 	}
 
 	fmt.Printf("Connection token: %v (Enter this when registering workers)\n", token)
 	return listener
 }
 
-// Blocks until the client connects 
+// Blocks until the client connects
 func connectAndCreateHttpClient(listener net.Listener) (*http.Client, error) {
 	conn, err := listener.Accept()
-	if (err != nil) {
+	if err != nil {
 		return nil, err
 	}
 
 	session, err := yamux.Client(conn, nil)
-	if (err != nil) {
+	if err != nil {
 		conn.Close()
 		return nil, err
 	}
 
-	httpConnection := &http.Client {
+	httpConnection := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return session.Open()
@@ -60,33 +60,33 @@ func connectAndCreateHttpClient(listener net.Listener) (*http.Client, error) {
 }
 
 // Returns an array of ints with length of 2
-// First one is the port worker is going to connect to 
-// Second one is the port the user is going to call the manager server 
+// First one is the port worker is going to connect to
+// Second one is the port the user is going to call the manager server
 func parseManagerArgs(args []string) ([2]int, error) {
-	if (len(args) < 2) {
+	if len(args) < 2 {
 		return [2]int{}, fmt.Errorf("Not enough number of args")
-	} 
-	
+	}
+
 	workerConnectionPort, err := strconv.Atoi(os.Args[0])
-	if (err != nil) {
+	if err != nil {
 		return [2]int{}, fmt.Errorf("Invalid port number for the connection with workers: %s", os.Args[0])
 	}
 
 	managerServerApiPort, err := strconv.Atoi(os.Args[1])
-	if (err != nil) {
+	if err != nil {
 		return [2]int{}, fmt.Errorf("Invalid port number for manager API: %s", os.Args[1])
 	}
 
 	return [2]int{workerConnectionPort, managerServerApiPort}, nil
 }
 
-// Returns the config read from disk / generated 
+// Returns the config read from disk / generated
 func setupConfig(ports [2]int, parseErr error) *configs.ManagerConfig {
 	config, err := configs.GetConfigFromFile[configs.ManagerConfig](ManagerConfigDirPath, ManagerConfigFileName)
 	hasExistingConfig := (err == nil)
 
-	if (parseErr != nil) {
-		if (!hasExistingConfig) {
+	if parseErr != nil {
+		if !hasExistingConfig {
 			log.Fatalln("Critical: No CLI arguments and no config file found.")
 		}
 		return config
@@ -95,14 +95,14 @@ func setupConfig(ports [2]int, parseErr error) *configs.ManagerConfig {
 	newWorkerConnectionPort := ports[0]
 	newManagerServerApiPort := ports[1]
 
-	if (!hasExistingConfig) {
+	if !hasExistingConfig {
 		cert, token := security.GenerateManagerIdentity()
 		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token)
 	} else {
-		if (newWorkerConnectionPort != 0) {
+		if newWorkerConnectionPort != 0 {
 			config.WorkerConnectionPort = newWorkerConnectionPort
 		}
-		if (newManagerServerApiPort != 0) {
+		if newManagerServerApiPort != 0 {
 			config.ServerApiPort = newManagerServerApiPort
 		}
 	}
@@ -114,27 +114,27 @@ func setupConfig(ports [2]int, parseErr error) *configs.ManagerConfig {
 func waitForWorkersForever(listener net.Listener, newManager *Manager) {
 	for {
 		httpClient, err := connectAndCreateHttpClient(listener)
-		if (err != nil) {
+		if err != nil {
 			log.Printf("Error creating http client: %v", err)
-			continue;
+			continue
 		}
 
 		resp, err := httpClient.Get("http://worker/info")
-		if (err != nil) {
+		if err != nil {
 			continue
 		}
 
 		workerInfo := &worker.Worker{}
 		json.NewDecoder(resp.Body).Decode(workerInfo)
-	
+
 		fmt.Printf("Connected worker name: %v\n", workerInfo.Name)
 		newManager.WorkerCluster.AddClient(workerInfo.Uuid, httpClient)
 
-		fmt.Printf("Registering worker with Name: %s, ID: %v\n", workerInfo.Name ,workerInfo.Uuid)
+		fmt.Printf("Registering worker with Name: %s, ID: %v\n", workerInfo.Name, workerInfo.Uuid)
 		newManager.State.RegisterWorker(workerInfo.Uuid, workerInfo.Name)
 
 		newManager.UpdateWorkerNodes()
-	}	
+	}
 }
 
 func Run(ports [2]int) {
@@ -142,15 +142,15 @@ func Run(ports [2]int) {
 
 	formattedPort := fmt.Sprintf(":%d", cfg.WorkerConnectionPort)
 	cert := tls.Certificate{
-			Certificate: cfg.TlsCertificateInBytes,
-			PrivateKey: ed25519.PrivateKey(cfg.TlsPrivateKey),
+		Certificate: cfg.TlsCertificateInBytes,
+		PrivateKey:  ed25519.PrivateKey(cfg.TlsPrivateKey),
 	}
 
 	listener := createTlsListener(
 		cert, cfg.TlsToken, formattedPort,
 	)
 
-	newManager := New(&scheduler.Epvm{}, "persistent");
+	newManager := New(&scheduler.Epvm{}, "persistent")
 	managerApi := Api{Manager: newManager, Port: cfg.ServerApiPort, TlsToken: cfg.TlsToken}
 
 	go newManager.SendTasksForever()

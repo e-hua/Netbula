@@ -35,15 +35,15 @@ func GenerateManagerIdentity() (tls.Certificate, string) {
 	return tls.Certificate{
 		Certificate: [][]byte{certDER},
 		PrivateKey:  priv,
-	}, token	
+	}, token
 }
 
 func GetManagerTlsConfig(tlsCertificate tls.Certificate) *tls.Config {
-	return 	&tls.Config{Certificates: []tls.Certificate{tlsCertificate}} 
+	return &tls.Config{Certificates: []tls.Certificate{tlsCertificate}}
 }
 
 func GetWorkerTlsConfig(tlsToken string) *tls.Config {
-	return 	&tls.Config{
+	return &tls.Config{
 		InsecureSkipVerify: true, // We manually verify the peer below
 		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			h := sha256.Sum256(rawCerts[0])

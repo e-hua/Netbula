@@ -17,7 +17,7 @@ func (i *InMemoryStore[T]) Put(key string, value *T) error {
 
 func (i *InMemoryStore[T]) Get(key string) (*T, error) {
 	t, ok := i.Db[key]
-	if (!ok) {
+	if !ok {
 		return nil, nil
 	}
 
@@ -27,7 +27,7 @@ func (i *InMemoryStore[T]) Get(key string) (*T, error) {
 func (i *InMemoryStore[T]) List() ([]*T, error) {
 	elements := make([]*T, 0, len(i.Db))
 
-	for _, currElem := range(i.Db) {
+	for _, currElem := range i.Db {
 		elements = append(elements, currElem)
 	}
 
@@ -35,9 +35,9 @@ func (i *InMemoryStore[T]) List() ([]*T, error) {
 }
 
 func (i *InMemoryStore[T]) Entries() ([]Entry[T], error) {
-	entries := make([]Entry[T], 0, )
+	entries := make([]Entry[T], 0)
 
-	for currKey, currElem := range(i.Db) {
+	for currKey, currElem := range i.Db {
 		entries = append(entries, Entry[T]{Key: currKey, Value: currElem})
 	}
 

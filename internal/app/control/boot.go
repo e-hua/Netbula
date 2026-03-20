@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	ControlConfigDirPath = "."
+	ControlConfigDirPath  = "."
 	ControlConfigFileName = "control_config.json"
 )
 
@@ -15,20 +15,20 @@ func setupConfig(newManagerAddress string, newToken string) *configs.ControlConf
 	config, err := configs.GetConfigFromFile[configs.ControlConfig](ControlConfigDirPath, ControlConfigFileName)
 	hasExistingConfig := (err == nil)
 
-	if (newManagerAddress == "" && newToken == "") {
-		if (!hasExistingConfig) {
+	if newManagerAddress == "" && newToken == "" {
+		if !hasExistingConfig {
 			log.Fatalln("Critical: No CLI arguments and no config file found.")
 		}
 		return config
 	}
 
-	if (!hasExistingConfig) {
+	if !hasExistingConfig {
 		config = configs.NewControlConfig(newManagerAddress, newToken)
 	} else {
-		if (newManagerAddress != "") {
+		if newManagerAddress != "" {
 			config.ManagerServerAddress = newManagerAddress
 		}
-		if (newToken != "") {
+		if newToken != "" {
 			config.ControlToken = newToken
 		}
 	}

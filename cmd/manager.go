@@ -31,17 +31,17 @@ func init() {
 
 	// Yamux/TLS connection
 	managerCmd.Flags().IntP(
-		"worker-port", 
-		"w", 
-		0, 
+		"worker-port",
+		"w",
+		0,
 		"Port for the worker nodes to connect to (Example: 1111)",
 	)
 
 	// User connection
 	managerCmd.Flags().IntP(
-		"api-port", 
-		"a", 
-		0, 
+		"api-port",
+		"a",
+		0,
 		"Port for the user client API (Example: 2222)",
 	)
 }

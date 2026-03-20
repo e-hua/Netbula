@@ -9,9 +9,9 @@ import (
 )
 
 const (
- // LIEB square ice constant
- // https://en.wikipedia.org/wiki/Lieb%27s_square_ice_constant
- LIEB = 1.53960071783900203869
+	// LIEB square ice constant
+	// https://en.wikipedia.org/wiki/Lieb%27s_square_ice_constant
+	LIEB = 1.53960071783900203869
 )
 
 type Epvm struct {
@@ -25,11 +25,11 @@ func checkDisk(t task.Task, diskAvailable int) bool {
 func (e *Epvm) SelectCandidateNodes(t task.Task, nodes []*node.Node) []*node.Node {
 	var candidates []*node.Node
 
-	for nodeIdx := range(nodes) {
+	for nodeIdx := range nodes {
 		currNode := nodes[nodeIdx]
-		diskAvailable := (1 - 0.01 * currNode.DiskAllocatedPercent) * float64(currNode.Disk)
+		diskAvailable := (1 - 0.01*currNode.DiskAllocatedPercent) * float64(currNode.Disk)
 
-		if (checkDisk(t, int(diskAvailable))) {
+		if checkDisk(t, int(diskAvailable)) {
 			candidates = append(candidates, currNode)
 		}
 	}
@@ -37,19 +37,19 @@ func (e *Epvm) SelectCandidateNodes(t task.Task, nodes []*node.Node) []*node.Nod
 	return candidates
 }
 
-// Score the nodes using the E-PVM algorithm 
+// Score the nodes using the E-PVM algorithm
 // Link to paper: https://mosix.cs.huji.ac.il/pub/ocja.pdf
 
 func (e *Epvm) Score(t task.Task, nodes []*node.Node) map[uuid.UUID]float64 {
-	nodeScores := make(map[uuid.UUID]float64) 
+	nodeScores := make(map[uuid.UUID]float64)
 
-	for _, currNode := range(nodes) {
+	for _, currNode := range nodes {
 
 		cpuLoad := currNode.CpuAverageLoad / float64(currNode.Cores)
-		predictedCpuLoad := cpuLoad + t.Cpu / float64(currNode.Cores)
+		predictedCpuLoad := cpuLoad + t.Cpu/float64(currNode.Cores)
 
 		memoryUsagePercent := currNode.MemoryAllocatedPercent / 100
-		predictedMemoryUsagePercent := memoryUsagePercent + (float64(t.Memory) / float64(currNode.Memory)) 
+		predictedMemoryUsagePercent := memoryUsagePercent + (float64(t.Memory) / float64(currNode.Memory))
 
 		memCost := math.Pow(LIEB, predictedMemoryUsagePercent) - math.Pow(LIEB, memoryUsagePercent)
 		cpuCost := math.Pow(LIEB, predictedCpuLoad) - math.Pow(LIEB, cpuLoad)
@@ -65,14 +65,14 @@ func (e *Epvm) Pick(scores map[uuid.UUID]float64, candidates []*node.Node) *node
 	var minCost float64
 	var bestNode *node.Node
 
-	for idx, node := range(candidates) {
-		if (idx == 0) {
+	for idx, node := range candidates {
+		if idx == 0 {
 			minCost = scores[node.WorkerUuid]
-			bestNode = node	
+			bestNode = node
 			continue
 		}
 
-		if (scores[node.WorkerUuid] < minCost) {
+		if scores[node.WorkerUuid] < minCost {
 			minCost = scores[node.WorkerUuid]
 			bestNode = node
 		}
