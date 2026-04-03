@@ -20,21 +20,24 @@ type ManagerLogger struct {
 // Set `allowVerbose` to be false if under deployment mode
 // Set it to be true if developing the application
 func NewManagerLogger(allowVerbose bool) *ManagerLogger {
-	var options *slog.HandlerOptions
+	var handler slog.Handler
+
 	// Set the minimum logging level for the new logger
 	if allowVerbose {
 		// Allowing DEBUG, INFO, WARN and ERROR level
-		options = &slog.HandlerOptions{Level: slog.LevelDebug}
+		options := &slog.HandlerOptions{Level: slog.LevelDebug}
+
+		// Include the source file of the logging
+		options.AddSource = true
+		handler = slog.NewJSONHandler(os.Stderr, options)
 	} else {
 		// Allowing only INFO, WARN and ERROR level
 		// DEBUG level logging will be quitely discarded
-		options = &slog.HandlerOptions{Level: slog.LevelInfo}
+		options := &slog.HandlerOptions{Level: slog.LevelInfo}
+
+		handler = slog.NewTextHandler(os.Stderr, options)
 	}
 
-	// Include the source file of the logging
-	options.AddSource = allowVerbose
-
-	handler := slog.NewJSONHandler(os.Stderr, options)
 	newLogger := slog.New(handler)
 
 	return &ManagerLogger{

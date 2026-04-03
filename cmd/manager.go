@@ -21,14 +21,21 @@ var managerCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		workerPort, _ := cmd.Flags().GetInt("worker-port")
 		apiPort, _ := cmd.Flags().GetInt("api-port")
+		verbose, _ := cmd.Flags().GetBool("verbose")
 
-		manager.Run([2]int{workerPort, apiPort}, true)
+		manager.Run([2]int{workerPort, apiPort}, verbose)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(managerCmd)
 	// TODO: Verbose mode
+	managerCmd.Flags().BoolP(
+		"verbose",
+		"v",
+		false,
+		"Enable verbose mode, which uses JSON instead of whitespace-separated key-value pairs for logging",
+	)
 
 	// Yamux/TLS connection
 	managerCmd.Flags().IntP(
