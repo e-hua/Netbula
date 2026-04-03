@@ -5,12 +5,11 @@ import (
 	"crypto/ed25519"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/configs"
@@ -25,16 +24,16 @@ const (
 	ManagerConfigFileName = "manager_config.json"
 )
 
-func createTlsListener(cert tls.Certificate, token string, port string) net.Listener {
+func createTlsListener(cert tls.Certificate, token string, port string) (net.Listener, error) {
 	tlsConfig := security.GetManagerTlsConfig(cert)
 
 	listener, err := tls.Listen("tcp", port, tlsConfig)
 	if err != nil {
-		log.Fatalf("Error listening to port %s: %v\n", port, err)
+		return nil, fmt.Errorf("failed to listen on port %s: %w", port, err)
 	}
 
 	fmt.Printf("Connection token: %v (Enter this when registering workers)\n", token)
-	return listener
+	return listener, nil
 }
 
 // Blocks until the client connects
@@ -60,46 +59,26 @@ func connectAndCreateHttpClient(listener net.Listener) (*http.Client, error) {
 	return httpConnection, nil
 }
 
-// Returns an array of ints with length of 2
-// First one is the port worker is going to connect to
-// Second one is the port the user is going to call the manager server
-func parseManagerArgs(args []string) ([2]int, error) {
-	if len(args) < 2 {
-		return [2]int{}, fmt.Errorf("Not enough number of args")
-	}
-
-	workerConnectionPort, err := strconv.Atoi(os.Args[0])
-	if err != nil {
-		return [2]int{}, fmt.Errorf("Invalid port number for the connection with workers: %s", os.Args[0])
-	}
-
-	managerServerApiPort, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-		return [2]int{}, fmt.Errorf("Invalid port number for manager API: %s", os.Args[1])
-	}
-
-	return [2]int{workerConnectionPort, managerServerApiPort}, nil
-}
-
 // Returns the config read from disk / generated
-func setupConfig(ports [2]int, parseErr error) *configs.ManagerConfig {
+func setupConfig(ports [2]int, logger logger.ManagerLogger) (*configs.ManagerConfig, error) {
 	config, err := configs.GetConfigFromFile[configs.ManagerConfig](ManagerConfigDirPath, ManagerConfigFileName)
-	hasExistingConfig := (err == nil)
-
-	if parseErr != nil {
-		if !hasExistingConfig {
-			log.Fatalln("Critical: No CLI arguments and no config file found.")
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			logger.Info("The config file does not exist yet, creating a new configuration with ports provided", "error", err)
+		} else {
+			logger.Warn("The config file is corrupted or cannot be read, creating a new configuration with ports provided", "error", err)
 		}
-		return config
 	}
 
 	newWorkerConnectionPort := ports[0]
 	newManagerServerApiPort := ports[1]
 
-	if !hasExistingConfig {
+	// We don't have previous configurations
+	if err != nil {
 		cert, token := security.GenerateManagerIdentity()
 		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token)
 	} else {
+		// Update the two fields if the values provided by flags is not default value 0
 		if newWorkerConnectionPort != 0 {
 			config.WorkerConnectionPort = newWorkerConnectionPort
 		}
@@ -108,8 +87,12 @@ func setupConfig(ports [2]int, parseErr error) *configs.ManagerConfig {
 		}
 	}
 
-	configs.StoreConfigToFile(ManagerConfigDirPath, ManagerConfigFileName, config)
-	return config
+	err = configs.StoreConfigToFile(ManagerConfigDirPath, ManagerConfigFileName, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to store the manager configs to file: %w", err)
+	}
+
+	return config, nil
 }
 
 func waitForWorkersForever(listener net.Listener, newManager *Manager) {
@@ -135,8 +118,14 @@ func waitForWorkersForever(listener net.Listener, newManager *Manager) {
 	}
 }
 
-func Run(ports [2]int) {
-	cfg := setupConfig(ports, nil)
+func Run(ports [2]int, verbose bool) {
+	managerLogger := logger.NewManagerLogger(verbose)
+
+	cfg, err := setupConfig(ports, *managerLogger)
+	if err != nil {
+		// Shutting down
+		managerLogger.TerminateApplication("Failed to setup configurations of manager", err)
+	}
 
 	formattedPort := fmt.Sprintf(":%d", cfg.WorkerConnectionPort)
 	cert := tls.Certificate{
@@ -144,16 +133,16 @@ func Run(ports [2]int) {
 		PrivateKey:  ed25519.PrivateKey(cfg.TlsPrivateKey),
 	}
 
-	listener := createTlsListener(
-		cert, cfg.TlsToken, formattedPort,
-	)
-	managerLogger := logger.NewManagerLogger(true)
+	listener, err := createTlsListener(cert, cfg.TlsToken, formattedPort)
+	if err != nil {
+		// Shutting down
+		managerLogger.TerminateApplication("Failed to initialize TCP listener with TLS encryption", err)
+	}
 
 	newManager, err := New(&scheduler.Epvm{}, "persistent", *managerLogger)
 	if err != nil {
 		// Shutting down
-		managerLogger.Error("Fatal: Terminating application immediately", "error", err, "reason", "Unable to initialize manager")
-		os.Exit(1)
+		managerLogger.TerminateApplication("Failed to initialize manager", err)
 	}
 
 	managerApi := Api{

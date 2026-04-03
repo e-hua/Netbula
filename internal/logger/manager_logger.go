@@ -110,3 +110,13 @@ func (m *ManagerLogger) NodeAppeared(workerNode node.Node) {
 func (m *ManagerLogger) NodeDisappeared(workerNode node.Node) {
 	m.Error("Node Disappeared", "node", workerNode)
 }
+
+// Terminates the Manager application immediately
+func (m *ManagerLogger) TerminateApplication(reason string, sourceErr error) {
+	m.Error("Fatal: Terminating application immediately",
+		"error", sourceErr,
+		"reason", reason,
+	)
+
+	os.Exit(1)
+}

@@ -22,12 +22,13 @@ var managerCmd = &cobra.Command{
 		workerPort, _ := cmd.Flags().GetInt("worker-port")
 		apiPort, _ := cmd.Flags().GetInt("api-port")
 
-		manager.Run([2]int{workerPort, apiPort})
+		manager.Run([2]int{workerPort, apiPort}, true)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(managerCmd)
+	// TODO: Verbose mode
 
 	// Yamux/TLS connection
 	managerCmd.Flags().IntP(
