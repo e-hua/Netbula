@@ -70,12 +70,13 @@ func (a *Api) Start(certs tls.Certificate) {
 	// Printing to stdout for normal users to see 
 	log.Printf("Manager API (Secure) listening on %d\n", a.Port)
 
+	// Log the critical info to the stderr
+	a.Logger.Info("Manager API started", slog.Int("port_number", a.Port))
+
 	err := server.ListenAndServeTLS("", "")
 	if (err != nil) {
 		a.Logger.Error("Failed to start server for control program to connect to", "error", err)	
 	}
-
-	a.Logger.Info("Manager API started", slog.Int("port_number", a.Port))
 }
 
 // POST localhost:<Port>/tasks
@@ -161,11 +162,14 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 
 	a.Manager.AddTaskEvent(stopTaskEvent)
 
-	responseWriter.WriteHeader(204)
+	responseWriter.WriteHeader(http.StatusNoContent)
 }
 
 // GET localhost:<Port>/nodes
 func (a *Api) GetNodesHandler(responseWriter http.ResponseWriter, request *http.Request) {
+	// Make sure nodes stats are up to date 
+	a.Manager.UpdateWorkerNodes()
+
 	nodes := a.Manager.GetNodes()
 	if nodes == nil {
 		nodes = []node.Node{}
