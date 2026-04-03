@@ -1,9 +1,12 @@
 package task
 
 import (
+	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/e-hua/netbula/internal/docker"
+	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/google/uuid"
 	"github.com/moby/moby/api/types/network"
 )
@@ -84,11 +87,39 @@ type Task struct {
 	ContainerID string
 }
 
+func (t Task) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("task_id", t.ID.String()),
+		slog.String("name", t.Name),
+		slog.String("state", t.State.String()),
+		slog.String("image", t.Image),
+		slog.Float64("cpu", t.Cpu),
+		slog.String("memory", fmt.Sprintf("%.2fGB", float64(t.Memory)/float64(types.GigabyteInBytes))),
+		slog.String("disk", fmt.Sprintf("%.2fGB", float64(t.Disk)/float64(types.GigabyteInBytes))),
+		slog.String("restart_policy", t.RestartPolicy),
+		slog.Time("start_time", t.StartTime),
+		slog.Time("finish_time", t.FinishTime),
+		slog.String("container_id", t.ContainerID),
+
+		slog.Any("exposed_ports", t.ExposedPorts),
+		slog.Any("port_bindings", t.PortBindings),
+	)
+}
+
 type TaskEvent struct {
 	ID          uuid.UUID
 	TargetState State
 	Timestamp   time.Time
 	Task        Task
+}
+
+func (te TaskEvent) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("event_id", te.ID.String()),
+		slog.String("target_state", te.TargetState.String()),
+		slog.Time("timestamp", te.Timestamp),
+		slog.Any("task", te.Task),
+	)
 }
 
 func NewConfig(task *Task) docker.Config {

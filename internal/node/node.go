@@ -3,6 +3,7 @@ package node
 import (
 	"fmt"
 	"log"
+	"log/slog"
 
 	"github.com/e-hua/netbula/internal/networks/types"
 	"github.com/google/uuid"
@@ -26,6 +27,24 @@ type Node struct {
 	TaskCount int
 
 	WorkerUuid uuid.UUID
+}
+
+func (n Node) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("worker_uuid", n.WorkerUuid.String()),
+		slog.String("name", n.Name),
+		slog.Int("cores", n.Cores),
+		slog.String("CPU_usage", fmt.Sprintf("%.2f%%", n.CpuAveragePercent)),
+		slog.Float64("CPU_load_index", n.CpuAverageLoad/float64(n.Cores)),
+
+		slog.String("memory", fmt.Sprintf("%.2fGB", float64(n.Memory)/float64(types.GigabyteInBytes))),
+		slog.String("memory_usage", fmt.Sprintf("%.2f%%", n.MemoryAllocatedPercent)),
+		slog.String("disk", fmt.Sprintf("%.2fGB", float64(n.Disk)/float64(types.GigabyteInBytes))),
+		slog.String("disk_usage", fmt.Sprintf("%.2f%%", n.DiskAllocatedPercent)),
+
+		slog.String("role", n.Role),
+		slog.Int("task_count", n.TaskCount),
+	)
 }
 
 func (node *Node) PrintNode() {
