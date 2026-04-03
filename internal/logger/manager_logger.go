@@ -6,6 +6,7 @@ import (
 
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
+	"github.com/google/uuid"
 )
 
 // Custom type with `slog.Logger` embedded
@@ -65,9 +66,9 @@ func (m *ManagerLogger) TaskSent(taskEvent *task.TaskEvent) {
 }
 
 // Triggered when `SyncTasks` in /internal/app/manager/cluster.go is invoked
-func (m *ManagerLogger) TasksSynced(taskEvent *task.TaskEvent) {
+func (m *ManagerLogger) TasksFetched(workerId uuid.UUID) {
 	// Less important since this check is done periodically
-	m.Debug("Task synced", "task_event", taskEvent)
+	m.Debug("Tasks from one worker is fetched", "worker_id", workerId.String())
 }
 
 // TODO: Add checks
@@ -92,19 +93,23 @@ func (m *ManagerLogger) WorkerNodesUpdated(nodes []*node.Node) {
 }
 
 // TODO: Add checks
-// Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go
+// Detected by `RegisterWorker` in /internal/app/manager/state.go
 func (m *ManagerLogger) WorkerConnected(workerNode *node.Node) {
-	m.Info("Worker Connected", "worker_node", workerNode)
+	m.Info("Worker Connected", "worker", workerNode)
 }
 
 // TODO: Add checks
-// Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go
+// Detected by `RegisterWorker` in /internal/app/manager/state.go
 func (m *ManagerLogger) WorkerReconnected(workerNode *node.Node) {
-	m.Info("Worker Reconnected", "worker_node", workerNode)
+	m.Info("Worker Reconnected", "worker", workerNode)
 }
 
-// TODO: Add checks
 // Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go
-func (m *ManagerLogger) WorkerDisconnected(workerNode *node.Node) {
-	m.Error("Worker Disconnected", "worker_node", workerNode)
+func (m *ManagerLogger) NodeAppeared(workerNode node.Node) {
+	m.Info("Node Appeared", "node", workerNode)
+}
+
+// Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go
+func (m *ManagerLogger) NodeDisappeared(workerNode node.Node) {
+	m.Error("Node Disappeared", "node", workerNode)
 }

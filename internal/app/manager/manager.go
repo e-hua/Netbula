@@ -36,7 +36,7 @@ type Manager struct {
 // Creating a new manager struct with no HTTP connections between workers
 func New(scheduler scheduler.Scheduler, dbType string, managerLogger logger.ManagerLogger) *Manager {
 	loadedStates := NewState(dbType)
-	createdCluster := NewCluster()
+	createdCluster := NewCluster(*logger.NewManagerLoggerWithSubsystem(managerLogger, "worker_cluster"))
 
 	m := &Manager{
 		State:         loadedStates,
@@ -70,7 +70,7 @@ func (m *Manager) AddWorkerAndClient(workerInfo *worker.Worker, client *http.Cli
 	m.State.RegisterWorker(workerInfo.Uuid, workerInfo.Name)
 	m.WorkerCluster.AddClient(workerInfo.Uuid, client)
 	// TODO: Log here to indicate the worker is connected
-	// Since is different from "disconnection" and "reconnection" of nodes?
+	// Since is different from "disappearance" and "appearance" of nodes?
 }
 
 /*
@@ -144,9 +144,11 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 		err = m.stopTask(taskEvent.Task.ID)
 		if err != nil {
 			retErr = fmt.Errorf("error stopping task: %w", err)
+			return targetEvent, retErr
 		}
 
-		return targetEvent, retErr
+		m.ManagerLogger.TaskSent(&taskEvent)
+		return targetEvent, nil
 	}
 
 	// Assign task to the worker
