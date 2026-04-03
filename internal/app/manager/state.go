@@ -2,12 +2,12 @@ package manager
 
 import (
 	"fmt"
-	"log"
 	"maps"
 	"os"
 	"slices"
 	"sync"
 
+	"github.com/e-hua/netbula/internal/logger"
 	"github.com/e-hua/netbula/internal/store"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/google/uuid"
@@ -32,11 +32,13 @@ type State struct {
 	// These are the info inferred from the TaskWorkerDb on start of the application
 	Workers       []uuid.UUID
 	WorkerTaskMap map[uuid.UUID][]uuid.UUID
+
+	stateLogger logger.ManagerLogger
 }
 
 // Load the storage to the manager object
 // Panic if any error appears
-func NewState(dbType string) *State {
+func NewState(dbType string, stateLogger logger.ManagerLogger) (*State, error) {
 	var taskStorage store.Store[task.Task]
 	var taskEventStorage store.Store[task.TaskEvent]
 	var taskToWorkerStorage store.Store[uuid.UUID]
@@ -51,14 +53,28 @@ func NewState(dbType string) *State {
 	case "persistent":
 		db, err := bolt.Open(ManagerDbPath, ManagerDbFileMode, nil)
 		if err != nil {
-			log.Fatalf("Error creating the persistent DB for manager: %v\n", err)
+			return nil, fmt.Errorf("failed to open the persistent DB for manager: %w", err)
 		}
 
 		persistentTaskDb, err := store.NewPersistentStore[task.Task](db, "tasks")
+		if err != nil {
+			return nil, fmt.Errorf("failed to construct the persistent task DB: %w", err)
+		}
+
 		persistentTaskEventDb, err := store.NewPersistentStore[task.TaskEvent](db, "events")
+		if err != nil {
+			return nil, fmt.Errorf("failed to construct the persistent task event DB: %w", err)
+		}
+
 		persistentTaskToWorkerDb, err := store.NewPersistentStore[uuid.UUID](db, "task_to_worker")
+		if err != nil {
+			return nil, fmt.Errorf("failed to construct the persistent task to worker DB: %w", err)
+		}
+
 		persistentWorkerNameDb, err := store.NewPersistentStore[string](db, "worker_id_to_name")
-		// TODO: Add error handling here
+		if err != nil {
+			return nil, fmt.Errorf("failed to construct the persistent worker id to name DB: %w", err)
+		}
 
 		taskStorage = persistentTaskDb
 		taskEventStorage = persistentTaskEventDb
@@ -71,22 +87,26 @@ func NewState(dbType string) *State {
 		EventDb:      taskEventStorage,
 		TaskWorkerDb: taskToWorkerStorage,
 		WorkerNameDb: workerNameStorage,
+		stateLogger:  stateLogger,
 	}
 
-	newState.rehydrate()
-	return newState
+	err := newState.rehydrate()
+	if err != nil {
+		return nil, fmt.Errorf("failed to rehydrate the State component with other derived attributes: %w", err)
+	}
+
+	return newState, nil
 }
 
 // Infer the fields like Workers and WorkerTaskMap from loaded storage
-func (state *State) rehydrate() {
+func (state *State) rehydrate() error {
 	// Locked entirely, other cannot read or write
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
 	taskWorkerEntries, err := state.TaskWorkerDb.Entries()
 	if err != nil {
-		log.Printf("Error getting entries in the db mapping tasks to workers")
-		taskWorkerEntries = make([]store.Entry[uuid.UUID], 0)
+		return fmt.Errorf("failed to get entries from the DB mapping tasks to workers: %w", err)
 	}
 
 	workerTaskMap := make(map[uuid.UUID][]uuid.UUID)
@@ -96,8 +116,7 @@ func (state *State) rehydrate() {
 	for _, taskWorkerEntry := range taskWorkerEntries {
 		taskUuid, err := uuid.Parse(taskWorkerEntry.Key)
 		if err != nil {
-			log.Printf("Error parsing the task UUID from the TaskWorker DB")
-			continue
+			return fmt.Errorf("failed to parse the task UUID (%s) from the TaskWorker DB: %w", taskWorkerEntry.Key, err)
 		}
 
 		workerUuid := *taskWorkerEntry.Value
@@ -113,16 +132,15 @@ func (state *State) rehydrate() {
 
 	workerNameEntries, err := state.WorkerNameDb.Entries()
 	if err != nil {
-		log.Printf("Error getting entries in the db mapping worker UUID to worker names")
-		workerNameEntries = make([]store.Entry[string], 0)
+		return fmt.Errorf("failed to get entries from the DB mapping worker UUID to worker names: %w", err)
 	}
 
 	for _, workerNameEntry := range workerNameEntries {
 		workerUuid, err := uuid.Parse(workerNameEntry.Key)
 		if err != nil {
-			log.Printf("Error parsing the task UUID from the WorkerNameDb")
-			continue
+			return fmt.Errorf("failed to parse the worker UUID (%s) from the WorkerName DB: %w", workerNameEntry.Key, err)
 		}
+
 		assignedTaskSlice, ok := workerTaskMap[workerUuid]
 		if !ok {
 			assignedTaskSlice = make([]uuid.UUID, 0)
@@ -135,6 +153,8 @@ func (state *State) rehydrate() {
 
 	state.Workers = workers
 	state.WorkerTaskMap = workerTaskMap
+
+	return nil
 }
 
 // Get the name and the number of tasks of a worker
@@ -164,27 +184,31 @@ func (state *State) GetWorkerIds() []uuid.UUID {
 }
 
 // Add the name and the UUID of the worker to the state of the manager
-func (state *State) RegisterWorker(workerUuid uuid.UUID, workerName string) {
+func (state *State) RegisterWorker(workerUuid uuid.UUID, workerName string) error {
 	// Locks entirely
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
 	name, err := state.WorkerNameDb.Get(workerUuid.String())
 
-	// Panic if DB is tripping
+	// If DB is tripping
 	if err != nil {
-		log.Fatalf("Error reading from the WorkerNameDb: %v", err)
-	}
-
-	// Worker already stored in the map
-	if name == nil {
-		state.Workers = append(state.Workers, workerUuid)
+		return fmt.Errorf("failed to read from the WorkerNameDb: %w", err)
 	}
 
 	err = state.WorkerNameDb.Put(workerUuid.String(), &workerName)
 	if err != nil {
-		log.Fatalf("Error writing to the WorkerNameDb: %v", err)
+		return fmt.Errorf("failed to write to the WorkerNameDb: %w", err)
 	}
+
+	if name == nil {
+		state.Workers = append(state.Workers, workerUuid)
+		state.stateLogger.WorkerConnected(workerUuid)
+	} else {
+		state.stateLogger.WorkerReconnected(workerUuid)
+	}
+
+	return nil
 }
 
 func (state *State) UpdateTask(taskToUpdate *task.Task) error {
@@ -194,7 +218,7 @@ func (state *State) UpdateTask(taskToUpdate *task.Task) error {
 	existingTask, err := state.TaskDb.Get(taskToUpdate.ID.String())
 	if err != nil {
 		return fmt.Errorf(
-			"Error getting task with ID %s from TaskDb: %v\n",
+			"failed to get task with UUID [%s] from TaskDb: %w",
 			taskToUpdate.ID.String(),
 			err,
 		)
@@ -202,17 +226,29 @@ func (state *State) UpdateTask(taskToUpdate *task.Task) error {
 
 	// If task from worker is not in the manager db
 	if existingTask == nil {
-		return fmt.Errorf("Task %s not found in manager db", taskToUpdate.ID.String())
+		return fmt.Errorf("task with UUID [%s] not found in TaskDb", taskToUpdate.ID.String())
+	}
+
+	// Log the comparison between previous task and current task, if the state changed 
+	// TODO: Change this implementation when more attributes are added 
+	if existingTask.State != taskToUpdate.State {
+		state.stateLogger.TaskStatusChanged(*existingTask, *taskToUpdate)
 	}
 
 	existingTask.State = taskToUpdate.State
 
+	// TODO: implement these features 
 	existingTask.StartTime = taskToUpdate.StartTime
 	existingTask.FinishTime = taskToUpdate.FinishTime
 	existingTask.ContainerID = taskToUpdate.ContainerID
 	existingTask.PortBindings = taskToUpdate.PortBindings
 
-	return state.TaskDb.Put(taskToUpdate.ID.String(), existingTask)
+	err = state.TaskDb.Put(taskToUpdate.ID.String(), existingTask)
+	if err != nil {
+		return fmt.Errorf("failed to put task with UUID [%s] into TaskDb: %w", taskToUpdate.ID.String(), err)
+	}
+
+	return nil
 }
 
 // Add task to TaskDb
@@ -225,11 +261,13 @@ func (state *State) AssignTaskToWorker(taskToAssign *task.Task, workerId uuid.UU
 	taskToAssign.State = task.Scheduled
 
 	if err := state.TaskDb.Put(taskToAssign.ID.String(), taskToAssign); err != nil {
-		return err
+		return fmt.Errorf("failed to add task [%s] to TaskDb: %w", taskToAssign.ID.String(), err)
 	}
+
 	if err := state.TaskWorkerDb.Put(taskToAssign.ID.String(), &workerId); err != nil {
-		return err
+		return fmt.Errorf("failed to add worker [%s] to TaskWorkerDb: %w", taskToAssign.ID.String(), err)
 	}
+
 	if !slices.Contains(state.WorkerTaskMap[workerId], taskToAssign.ID) {
 		state.WorkerTaskMap[workerId] = append(state.WorkerTaskMap[workerId], taskToAssign.ID)
 	}

@@ -71,7 +71,6 @@ func (m *ManagerLogger) TasksFetched(workerId uuid.UUID) {
 	m.Debug("Tasks from one worker is fetched", "worker_id", workerId.String())
 }
 
-// TODO: Add checks
 // Detected by `UpdateTask` in /internal/app/manager/state.go
 func (m *ManagerLogger) TaskStatusChanged(prevTask task.Task, newTask task.Task) {
 	m.Info("Task status change detected",
@@ -92,16 +91,14 @@ func (m *ManagerLogger) WorkerNodesUpdated(nodes []*node.Node) {
 	m.Debug("Worker nodes stats updated", "nodes", nodeLogValues)
 }
 
-// TODO: Add checks
 // Detected by `RegisterWorker` in /internal/app/manager/state.go
-func (m *ManagerLogger) WorkerConnected(workerNode *node.Node) {
-	m.Info("Worker Connected", "worker", workerNode)
+func (m *ManagerLogger) WorkerConnected(workerUuid uuid.UUID) {
+	m.Info("Worker Connected", "worker_id", workerUuid.String())
 }
 
-// TODO: Add checks
 // Detected by `RegisterWorker` in /internal/app/manager/state.go
-func (m *ManagerLogger) WorkerReconnected(workerNode *node.Node) {
-	m.Info("Worker Reconnected", "worker", workerNode)
+func (m *ManagerLogger) WorkerReconnected(workerUuid uuid.UUID) {
+	m.Info("Worker Reconnected", "worker_id", workerUuid.String())
 }
 
 // Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go

@@ -34,8 +34,12 @@ type Manager struct {
 // Loading the DBs and process them in memory
 // Infer the rest of the fields before
 // Creating a new manager struct with no HTTP connections between workers
-func New(scheduler scheduler.Scheduler, dbType string, managerLogger logger.ManagerLogger) *Manager {
-	loadedStates := NewState(dbType)
+func New(scheduler scheduler.Scheduler, dbType string, managerLogger logger.ManagerLogger) (*Manager, error) {
+	loadedStates, err := NewState(dbType, *logger.NewManagerLoggerWithSubsystem(managerLogger, "state"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create the State component storing mappings: %w", err)
+	}
+
 	createdCluster := NewCluster(*logger.NewManagerLoggerWithSubsystem(managerLogger, "worker_cluster"))
 
 	m := &Manager{
@@ -48,7 +52,7 @@ func New(scheduler scheduler.Scheduler, dbType string, managerLogger logger.Mana
 		ManagerLogger: managerLogger,
 	}
 
-	return m
+	return m, nil
 }
 
 // Iterate through all the UUIDs in the current state of the manager
@@ -67,10 +71,18 @@ func (m *Manager) getWorkerClient(workerId uuid.UUID) (*http.Client, error) {
 // Register a worker
 // And put the http client connected with the worker into the WorkerCluster
 func (m *Manager) AddWorkerAndClient(workerInfo *worker.Worker, client *http.Client) {
-	m.State.RegisterWorker(workerInfo.Uuid, workerInfo.Name)
+	err := m.State.RegisterWorker(workerInfo.Uuid, workerInfo.Name)
+	if err != nil {
+		m.ManagerLogger.Error(
+			"Failed to register name of the worker", 
+			"error", err, 
+			"worker_id", workerInfo.Uuid.String(), 
+			"worker_name", workerInfo.Name,
+		)
+		return 
+	}
+
 	m.WorkerCluster.AddClient(workerInfo.Uuid, client)
-	// TODO: Log here to indicate the worker is connected
-	// Since is different from "disappearance" and "appearance" of nodes?
 }
 
 /*

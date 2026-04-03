@@ -116,12 +116,13 @@ func waitForWorkersForever(listener net.Listener, newManager *Manager) {
 	for {
 		httpClient, err := connectAndCreateHttpClient(listener)
 		if err != nil {
-			log.Printf("Error creating http client: %v", err)
+			newManager.ManagerLogger.Error("Failed to connect to worker and create an HTTP client", "error", err)
 			continue
 		}
 
 		resp, err := httpClient.Get("http://worker/info")
 		if err != nil {
+			newManager.ManagerLogger.Error("Failed to get worker info", "error", err)
 			continue
 		}
 
@@ -148,12 +149,18 @@ func Run(ports [2]int) {
 	)
 	managerLogger := logger.NewManagerLogger(true)
 
-	newManager := New(&scheduler.Epvm{}, "persistent", *managerLogger)
+	newManager, err := New(&scheduler.Epvm{}, "persistent", *managerLogger)
+	if err != nil {
+		// Shutting down
+		managerLogger.Error("Fatal: Terminating application immediately", "error", err, "reason", "Unable to initialize manager")
+		os.Exit(1)
+	}
+
 	managerApi := Api{
-		Manager: newManager, 
-		Port: cfg.ServerApiPort, 
-		TlsToken: cfg.TlsToken, 
-		Logger: *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
+		Manager:  newManager,
+		Port:     cfg.ServerApiPort,
+		TlsToken: cfg.TlsToken,
+		Logger:   *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
 	}
 
 	go newManager.SendTasksForever()
