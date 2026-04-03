@@ -30,6 +30,9 @@ func NewManagerLogger(allowVerbose bool) *ManagerLogger {
 		options = &slog.HandlerOptions{Level: slog.LevelInfo}
 	}
 
+	// Include the source file of the logging
+	options.AddSource = allowVerbose
+
 	handler := slog.NewJSONHandler(os.Stderr, options)
 	newLogger := slog.New(handler)
 
@@ -38,17 +41,25 @@ func NewManagerLogger(allowVerbose bool) *ManagerLogger {
 	}
 }
 
+func NewManagerLoggerWithSubsystem(parentLogger ManagerLogger, subsystemTag string) *ManagerLogger {
+	return &ManagerLogger{
+		*parentLogger.Logger.With("subsystem", subsystemTag),
+	}
+}
+
 // Received a request to add another TaskEvent from the manager API
 // (Add the taskEvent to the queue of pending taskEvents afterwards)
 //
-// Triggered when `StartTaskHandler` in internal/app/manager/api.go is invoked
+// Triggered when [StartTaskHandler/StopTaskHandler] is invoked
+// [github.com/e-hua/netbula/blob/main/internal/app/manager/api.go]
 func (m *ManagerLogger) TaskReceived(taskEvent *task.TaskEvent) {
 	m.Info("Task received from control", "task_event", taskEvent)
 }
 
 // Manager sends the target TaskEvent to the worker node
 //
-// Triggered when `SendWork` in /internal/app/manager/manager.go is invoked (in the `SendTasksForever` loop)
+// Triggered when [SendWork] is invoked
+// [github.com/e-hua/netbula/blob/main/internal/app/manager/manager.go]
 func (m *ManagerLogger) TaskSent(taskEvent *task.TaskEvent) {
 	m.Info("Task sent to worker", "task_event", taskEvent)
 }
@@ -83,17 +94,17 @@ func (m *ManagerLogger) WorkerNodesUpdated(nodes []*node.Node) {
 // TODO: Add checks
 // Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go
 func (m *ManagerLogger) WorkerConnected(workerNode *node.Node) {
-	m.Info("Worker Connected!", "worker_node", workerNode)
+	m.Info("Worker Connected", "worker_node", workerNode)
 }
 
 // TODO: Add checks
 // Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go
 func (m *ManagerLogger) WorkerReconnected(workerNode *node.Node) {
-	m.Info("Worker Reconnected!", "worker_node", workerNode)
+	m.Info("Worker Reconnected", "worker_node", workerNode)
 }
 
 // TODO: Add checks
 // Detected by `UpdateWorkerNodes` in /internal/app/manager/cluster.go
 func (m *ManagerLogger) WorkerDisconnected(workerNode *node.Node) {
-	m.Error("Worker Disconnected!", "worker_node", workerNode)
+	m.Error("Worker Disconnected", "worker_node", workerNode)
 }

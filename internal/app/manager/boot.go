@@ -14,6 +14,7 @@ import (
 
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/configs"
+	"github.com/e-hua/netbula/internal/logger"
 	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/e-hua/netbula/internal/scheduler"
 	"github.com/hashicorp/yamux"
@@ -127,11 +128,7 @@ func waitForWorkersForever(listener net.Listener, newManager *Manager) {
 		workerInfo := &worker.Worker{}
 		json.NewDecoder(resp.Body).Decode(workerInfo)
 
-		fmt.Printf("Connected worker name: %v\n", workerInfo.Name)
-		newManager.WorkerCluster.AddClient(workerInfo.Uuid, httpClient)
-
-		fmt.Printf("Registering worker with Name: %s, ID: %v\n", workerInfo.Name, workerInfo.Uuid)
-		newManager.State.RegisterWorker(workerInfo.Uuid, workerInfo.Name)
+		newManager.AddWorkerAndClient(workerInfo, httpClient)
 
 		newManager.UpdateWorkerNodes()
 	}
@@ -149,9 +146,15 @@ func Run(ports [2]int) {
 	listener := createTlsListener(
 		cert, cfg.TlsToken, formattedPort,
 	)
+	managerLogger := logger.NewManagerLogger(true)
 
-	newManager := New(&scheduler.Epvm{}, "persistent")
-	managerApi := Api{Manager: newManager, Port: cfg.ServerApiPort, TlsToken: cfg.TlsToken}
+	newManager := New(&scheduler.Epvm{}, "persistent", *managerLogger)
+	managerApi := Api{
+		Manager: newManager, 
+		Port: cfg.ServerApiPort, 
+		TlsToken: cfg.TlsToken, 
+		Logger: *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
+	}
 
 	go newManager.SendTasksForever()
 	go newManager.UpdateTasksForever()

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/e-hua/netbula/internal/logger"
 	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
@@ -23,6 +25,8 @@ type Api struct {
 	Manager  *Manager
 	Router   *chi.Mux
 	TlsToken string
+
+	Logger logger.ManagerLogger
 }
 
 func (a *Api) initRouter() {
@@ -63,13 +67,21 @@ func (a *Api) Start(certs tls.Certificate) {
 		TLSConfig: tlsConfig,
 	}
 
+	// Printing to stdout for normal users to see 
 	log.Printf("Manager API (Secure) listening on %d\n", a.Port)
-	log.Fatal(server.ListenAndServeTLS("", ""))
+
+	err := server.ListenAndServeTLS("", "")
+	if (err != nil) {
+		a.Logger.Error("Failed to start server for control program to connect to", "error", err)	
+	}
+
+	a.Logger.Info("Manager API started", slog.Int("port_number", a.Port))
 }
 
 // POST localhost:<Port>/tasks
-
+//
 // Only responsible for putting the task in the queue of pending task events
+// TODO: Combine [StartTaskHandler] with [StopTaskHandler]
 func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
@@ -77,14 +89,15 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 	newTaskEvent := task.TaskEvent{}
 	err := decoder.Decode(&newTaskEvent)
 	if err != nil {
-		msg := fmt.Sprintf("Error unmarshalling body: %v\n", err)
-		log.Printf("%s", msg)
-		routers.RespondError(responseWriter, http.StatusBadRequest, msg)
+		resErr := fmt.Errorf("failed to unmarshal body: %w", err)
+		routers.RespondError(responseWriter, http.StatusBadRequest, resErr.Error())
+		a.Logger.Error("Failed when handling request to start a task", "error", resErr)
 		return
 	}
 
+	a.Logger.TaskReceived(&newTaskEvent)
+
 	a.Manager.AddTaskEvent(newTaskEvent)
-	log.Printf("Added task %v\n", newTaskEvent.Task.ID)
 	routers.RespondJSON(responseWriter, http.StatusCreated, newTaskEvent.Task)
 }
 
@@ -92,7 +105,10 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	tasks, err := a.Manager.State.TaskDb.List()
 	if err != nil {
-		routers.RespondError(responseWriter, http.StatusInternalServerError, err.Error())
+		resErr := fmt.Errorf("failed to get tasks from TaskDb: %w", err)
+		routers.RespondError(responseWriter, http.StatusInternalServerError, resErr.Error())
+		a.Logger.Error("Failed when handling request to list tasks", "error", resErr)
+		return
 	}
 
 	if tasks == nil {
@@ -106,18 +122,27 @@ func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.
 
 // Only responsible for putting the task in the queue of pending task events
 func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.Request) {
+	var resErr error
+
+	defer func() {
+		if resErr != nil {
+			a.Logger.Error("Failed when handling request to stop task", "error", resErr)
+		}
+	}()
+
 	taskId := chi.URLParam(request, "taskId")
-	if taskId == "" {
-		routers.RespondError(responseWriter, 400, "No taskId passed in the request.\n")
+	parsedId, err := uuid.Parse(taskId)
+	if err != nil {
+		resErr = fmt.Errorf("failed to parse taskId %s as UUID: %w", taskId ,err)
+		routers.RespondError(responseWriter, http.StatusBadRequest, resErr.Error())
+		return 
 	}
 
-	parsedId, _ := uuid.Parse(taskId)
-	fmt.Printf("Parsed Id: %v\n", parsedId)
 
 	taskToStop, err := a.Manager.State.TaskDb.Get(parsedId.String())
 	if err != nil {
-		message := fmt.Sprintf("No task with ID %v found in storage\n", parsedId)
-		routers.RespondError(responseWriter, 404, message)
+		resErr = fmt.Errorf("failed to get task with ID [%s] from TaskDb: %w",parsedId.String(), err)
+		routers.RespondError(responseWriter, http.StatusNotFound, resErr.Error())
 		return
 	}
 
@@ -129,9 +154,11 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 		ID:          uuid.New(),
 		TargetState: task.Completed,
 		Timestamp:   time.Now(),
+		Task: taskCopy,
 	}
 
-	stopTaskEvent.Task = taskCopy
+	a.Logger.TaskReceived(&stopTaskEvent)
+
 	a.Manager.AddTaskEvent(stopTaskEvent)
 
 	responseWriter.WriteHeader(204)
