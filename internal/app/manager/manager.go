@@ -74,12 +74,12 @@ func (m *Manager) AddWorkerAndClient(workerInfo *worker.Worker, client *http.Cli
 	err := m.State.RegisterWorker(workerInfo.Uuid, workerInfo.Name)
 	if err != nil {
 		m.ManagerLogger.Error(
-			"Failed to register name of the worker", 
-			"error", err, 
-			"worker_id", workerInfo.Uuid.String(), 
+			"Failed to register name of the worker",
+			"error", err,
+			"worker_id", workerInfo.Uuid.String(),
 			"worker_name", workerInfo.Name,
 		)
-		return 
+		return
 	}
 
 	m.WorkerCluster.AddClient(workerInfo.Uuid, client)

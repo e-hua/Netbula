@@ -33,7 +33,7 @@ func NewCluster(clusterLogger logger.ManagerLogger) *Cluster {
 	return &Cluster{
 		WorkerClientMap: make(map[uuid.UUID]*http.Client, 0),
 		WorkerNodes:     make([]*node.Node, 0),
-		clusterLogger: clusterLogger,
+		clusterLogger:   clusterLogger,
 	}
 }
 
@@ -61,7 +61,7 @@ func (cluster *Cluster) UpdateWorkerNodes(state *State) {
 		}
 
 		// This amazing feature came out in Go 1.25
-		// No need to do Wg.Done() and wg.Add() manually 
+		// No need to do Wg.Done() and wg.Add() manually
 		wg.Go(func() {
 			stats, err := fetchNodeStats(currClient)
 			if err != nil {
@@ -117,7 +117,7 @@ func (cluster *Cluster) detectNodeChanges(newNodes []*node.Node) {
 	oldNodes := cluster.GetNodes()
 	oldNodesMap := make(map[uuid.UUID]node.Node)
 	newNodesMap := make(map[uuid.UUID]node.Node)
-	
+
 	for _, oldNode := range oldNodes {
 		oldNodesMap[oldNode.WorkerUuid] = oldNode
 	}
@@ -129,14 +129,14 @@ func (cluster *Cluster) detectNodeChanges(newNodes []*node.Node) {
 	for oldNodeId, oldNode := range oldNodesMap {
 		_, ok := newNodesMap[oldNodeId]
 		if !ok {
-			cluster.clusterLogger.NodeDisappeared(oldNode)	
+			cluster.clusterLogger.NodeDisappeared(oldNode)
 		}
 	}
 
 	for newNodeId, newNode := range newNodesMap {
 		_, ok := oldNodesMap[newNodeId]
 		if !ok {
-			cluster.clusterLogger.NodeAppeared(newNode)	
+			cluster.clusterLogger.NodeAppeared(newNode)
 		}
 	}
 }
@@ -185,7 +185,7 @@ func (cluster *Cluster) SyncTasks(state *State) {
 				return
 			}
 
-			// Log to show the fetching is done 
+			// Log to show the fetching is done
 			cluster.clusterLogger.TasksFetched(workerUuid)
 
 			tasksChan <- tasks
@@ -205,8 +205,8 @@ func (cluster *Cluster) SyncTasks(state *State) {
 			err := state.UpdateTask(taskToUpdate)
 			if err != nil {
 				cluster.clusterLogger.Error(
-					"Failed when updating task in the storage of the manager", 
-					"error", err, 
+					"Failed when updating task in the storage of the manager",
+					"error", err,
 					"task_to_update", taskToUpdate.ID.String(),
 				)
 			}
@@ -284,7 +284,7 @@ func postTask(workerHttpClient *http.Client, taskEvent task.TaskEvent, targetWor
 	return &decodedTask, nil
 }
 
-// TODO: Merge this method with SendTask 
+// TODO: Merge this method with SendTask
 func (cluster *Cluster) StopTask(state *State, taskIdToStop uuid.UUID) error {
 	workerId, err := state.TaskWorkerDb.Get(taskIdToStop.String())
 	if err != nil {

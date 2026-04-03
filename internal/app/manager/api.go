@@ -67,15 +67,15 @@ func (a *Api) Start(certs tls.Certificate) {
 		TLSConfig: tlsConfig,
 	}
 
-	// Printing to stdout for normal users to see 
+	// Printing to stdout for normal users to see
 	log.Printf("Manager API (Secure) listening on %d\n", a.Port)
 
 	// Log the critical info to the stderr
 	a.Logger.Info("Manager API started", slog.Int("port_number", a.Port))
 
 	err := server.ListenAndServeTLS("", "")
-	if (err != nil) {
-		a.Logger.Error("Failed to start server for control program to connect to", "error", err)	
+	if err != nil {
+		a.Logger.Error("Failed to start server for control program to connect to", "error", err)
 	}
 }
 
@@ -134,15 +134,14 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 	taskId := chi.URLParam(request, "taskId")
 	parsedId, err := uuid.Parse(taskId)
 	if err != nil {
-		resErr = fmt.Errorf("failed to parse taskId %s as UUID: %w", taskId ,err)
+		resErr = fmt.Errorf("failed to parse taskId %s as UUID: %w", taskId, err)
 		routers.RespondError(responseWriter, http.StatusBadRequest, resErr.Error())
-		return 
+		return
 	}
-
 
 	taskToStop, err := a.Manager.State.TaskDb.Get(parsedId.String())
 	if err != nil {
-		resErr = fmt.Errorf("failed to get task with ID [%s] from TaskDb: %w",parsedId.String(), err)
+		resErr = fmt.Errorf("failed to get task with ID [%s] from TaskDb: %w", parsedId.String(), err)
 		routers.RespondError(responseWriter, http.StatusNotFound, resErr.Error())
 		return
 	}
@@ -155,7 +154,7 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 		ID:          uuid.New(),
 		TargetState: task.Completed,
 		Timestamp:   time.Now(),
-		Task: taskCopy,
+		Task:        taskCopy,
 	}
 
 	a.Logger.TaskReceived(&stopTaskEvent)
@@ -167,7 +166,7 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 
 // GET localhost:<Port>/nodes
 func (a *Api) GetNodesHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	// Make sure nodes stats are up to date 
+	// Make sure nodes stats are up to date
 	a.Manager.UpdateWorkerNodes()
 
 	nodes := a.Manager.GetNodes()

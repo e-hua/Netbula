@@ -229,15 +229,15 @@ func (state *State) UpdateTask(taskToUpdate *task.Task) error {
 		return fmt.Errorf("task with UUID [%s] not found in TaskDb", taskToUpdate.ID.String())
 	}
 
-	// Log the comparison between previous task and current task, if the state changed 
-	// TODO: Change this implementation when more attributes are added 
+	// Log the comparison between previous task and current task, if the state changed
+	// TODO: Change this implementation when more attributes are added
 	if existingTask.State != taskToUpdate.State {
 		state.stateLogger.TaskStatusChanged(*existingTask, *taskToUpdate)
 	}
 
 	existingTask.State = taskToUpdate.State
 
-	// TODO: implement these features 
+	// TODO: implement these features
 	existingTask.StartTime = taskToUpdate.StartTime
 	existingTask.FinishTime = taskToUpdate.FinishTime
 	existingTask.ContainerID = taskToUpdate.ContainerID
