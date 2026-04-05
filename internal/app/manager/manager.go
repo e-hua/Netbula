@@ -4,20 +4,28 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/logger"
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/scheduler"
+	"github.com/e-hua/netbula/internal/store"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
+	bolt "go.etcd.io/bbolt"
 )
 
 const (
 	UpdateTasksPeriod = 15 * time.Second
 	SendTasksPeriod   = 15 * time.Second
+)
+
+const (
+	ManagerDbPath                 = "manager.db"
+	ManagerDbFileMode os.FileMode = 0600
 )
 
 type Manager struct {
@@ -31,11 +39,64 @@ type Manager struct {
 	ManagerLogger logger.ManagerLogger
 }
 
+func createPersistentStateStores(managerDbPath string, managerDbFileMode os.FileMode) (*StateStores, error) {
+	db, err := bolt.Open(managerDbPath, managerDbFileMode, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open the persistent DB for manager: %w", err)
+	}
+
+	persistentTaskDb, err := store.NewPersistentStore[task.Task](db, "tasks")
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct the persistent task DB: %w", err)
+	}
+
+	persistentTaskEventDb, err := store.NewPersistentStore[task.TaskEvent](db, "events")
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct the persistent task event DB: %w", err)
+	}
+
+	persistentTaskToWorkerDb, err := store.NewPersistentStore[uuid.UUID](db, "task_to_worker")
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct the persistent task to worker DB: %w", err)
+	}
+
+	persistentWorkerNameDb, err := store.NewPersistentStore[string](db, "worker_id_to_name")
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct the persistent worker id to name DB: %w", err)
+	}
+
+	return &StateStores{
+		TaskDb:       persistentTaskDb,
+		EventDb:      persistentTaskEventDb,
+		TaskWorkerDb: persistentTaskToWorkerDb,
+		WorkerNameDb: persistentWorkerNameDb,
+	}, nil
+}
+
+func createInMemoryStores() (*StateStores, error) {
+	taskStorage := store.NewInMemoryStore[task.Task]()
+	taskEventStorage := store.NewInMemoryStore[task.TaskEvent]()
+	taskToWorkerStorage := store.NewInMemoryStore[uuid.UUID]()
+	workerNameStorage := store.NewInMemoryStore[string]()
+
+	return &StateStores{
+		TaskDb:       taskStorage,
+		EventDb:      taskEventStorage,
+		TaskWorkerDb: taskToWorkerStorage,
+		WorkerNameDb: workerNameStorage,
+	}, nil
+}
+
 // Loading the DBs and process them in memory
 // Infer the rest of the fields before
 // Creating a new manager struct with no HTTP connections between workers
-func New(scheduler scheduler.Scheduler, dbType string, managerLogger logger.ManagerLogger) (*Manager, error) {
-	loadedStates, err := NewState(dbType, *logger.NewManagerLoggerWithSubsystem(managerLogger, "state"))
+func New(scheduler scheduler.Scheduler, managerLogger logger.ManagerLogger) (*Manager, error) {
+	stateStores, err := createPersistentStateStores(ManagerDbPath, ManagerDbFileMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DBs providing persistent storage for manager: %w", err)
+	}
+
+	loadedStates, err := NewState(*stateStores, *logger.NewManagerLoggerWithSubsystem(managerLogger, "state"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create the State component storing mappings: %w", err)
 	}

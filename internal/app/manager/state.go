@@ -3,7 +3,6 @@ package manager
 import (
 	"fmt"
 	"maps"
-	"os"
 	"slices"
 	"sync"
 
@@ -11,12 +10,6 @@ import (
 	"github.com/e-hua/netbula/internal/store"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/google/uuid"
-	bolt "go.etcd.io/bbolt"
-)
-
-const (
-	ManagerDbPath                 = "manager.db"
-	ManagerDbFileMode os.FileMode = 0600
 )
 
 // Stored and inferred states of manager
@@ -24,10 +17,7 @@ type State struct {
 	// Need to include mutex to prevent multiple writes at the same time
 	mutex sync.RWMutex
 
-	TaskDb       store.Store[task.Task]      // uuid -> task
-	EventDb      store.Store[task.TaskEvent] // uuid -> taskEvent
-	TaskWorkerDb store.Store[uuid.UUID]      // TaskUuid -> WorkerUuid
-	WorkerNameDb store.Store[string]         // uuid -> WorkerName
+	StateStores
 
 	// These are the info inferred from the TaskWorkerDb on start of the application
 	Workers       []uuid.UUID
@@ -36,58 +26,19 @@ type State struct {
 	stateLogger logger.ManagerLogger
 }
 
+type StateStores struct {
+	TaskDb       store.Store[task.Task]      // uuid -> task
+	EventDb      store.Store[task.TaskEvent] // uuid -> taskEvent
+	TaskWorkerDb store.Store[uuid.UUID]      // TaskUuid -> WorkerUuid
+	WorkerNameDb store.Store[string]         // uuid -> WorkerName
+}
+
 // Load the storage to the manager object
 // Panic if any error appears
-func NewState(dbType string, stateLogger logger.ManagerLogger) (*State, error) {
-	var taskStorage store.Store[task.Task]
-	var taskEventStorage store.Store[task.TaskEvent]
-	var taskToWorkerStorage store.Store[uuid.UUID]
-	var workerNameStorage store.Store[string]
-
-	switch dbType {
-	case "memory":
-		taskStorage = store.NewInMemoryStore[task.Task]()
-		taskEventStorage = store.NewInMemoryStore[task.TaskEvent]()
-		taskToWorkerStorage = store.NewInMemoryStore[uuid.UUID]()
-		workerNameStorage = store.NewInMemoryStore[string]()
-	case "persistent":
-		db, err := bolt.Open(ManagerDbPath, ManagerDbFileMode, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open the persistent DB for manager: %w", err)
-		}
-
-		persistentTaskDb, err := store.NewPersistentStore[task.Task](db, "tasks")
-		if err != nil {
-			return nil, fmt.Errorf("failed to construct the persistent task DB: %w", err)
-		}
-
-		persistentTaskEventDb, err := store.NewPersistentStore[task.TaskEvent](db, "events")
-		if err != nil {
-			return nil, fmt.Errorf("failed to construct the persistent task event DB: %w", err)
-		}
-
-		persistentTaskToWorkerDb, err := store.NewPersistentStore[uuid.UUID](db, "task_to_worker")
-		if err != nil {
-			return nil, fmt.Errorf("failed to construct the persistent task to worker DB: %w", err)
-		}
-
-		persistentWorkerNameDb, err := store.NewPersistentStore[string](db, "worker_id_to_name")
-		if err != nil {
-			return nil, fmt.Errorf("failed to construct the persistent worker id to name DB: %w", err)
-		}
-
-		taskStorage = persistentTaskDb
-		taskEventStorage = persistentTaskEventDb
-		taskToWorkerStorage = persistentTaskToWorkerDb
-		workerNameStorage = persistentWorkerNameDb
-	}
-
+func NewState(stateStores StateStores, stateLogger logger.ManagerLogger) (*State, error) {
 	newState := &State{
-		TaskDb:       taskStorage,
-		EventDb:      taskEventStorage,
-		TaskWorkerDb: taskToWorkerStorage,
-		WorkerNameDb: workerNameStorage,
-		stateLogger:  stateLogger,
+		stateLogger: stateLogger,
+		StateStores: stateStores,
 	}
 
 	err := newState.rehydrate()

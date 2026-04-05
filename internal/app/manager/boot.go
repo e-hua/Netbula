@@ -139,7 +139,7 @@ func Run(ports [2]int, verbose bool) {
 		managerLogger.TerminateApplication("Failed to initialize TCP listener with TLS encryption", err)
 	}
 
-	newManager, err := New(&scheduler.Epvm{}, "persistent", *managerLogger)
+	newManager, err := New(&scheduler.Epvm{}, *managerLogger)
 	if err != nil {
 		// Shutting down
 		managerLogger.TerminateApplication("Failed to initialize manager", err)
