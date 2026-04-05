@@ -99,7 +99,7 @@ func putValues[T any](t *testing.T, entries []testPutData[T], testStore Store[T]
 	}
 }
 
-func TestPersistenStorePut(t *testing.T) {
+func TestPersistenStore_Put(t *testing.T) {
 	t.Run("Integers", func(t *testing.T) {
 		entries := []testPutData[int]{
 			{putKey: "key-1", putVal: 1},
@@ -136,7 +136,7 @@ func TestPersistenStorePut(t *testing.T) {
 		entries := []testPutData[testNestedStruct]{
 			{putKey: "key-1", putVal: testNestedStruct{}},
 			{putKey: " ", putVal: testNestedStruct{Name: "", SimpleStruct: testSimpleStruct{StringVal: ""}}},
-			{putKey: "key-2", putVal: testNestedStruct{Name: "", SimpleStruct: testSimpleStruct{FloatVal: 0.0000001}}},
+			{putKey: "key-2", putVal: testNestedStruct{Name: "", SimpleStruct: testSimpleStruct{FloatVal: 1e-20}}},
 			{putKey: "~", putVal: testNestedStruct{Name: "John", Age: 19, SimpleStruct: testSimpleStruct{BoolVal: true, FloatVal: -10.2, StringVal: "Some string"}}},
 		}
 		testPersistentStore := createTestPersistentStore[testNestedStruct](t)
@@ -187,7 +187,7 @@ func getValues[T any](t *testing.T, entries []testGetData[T], testStore Store[T]
 	}
 }
 
-func TestPersistentStoreGet(t *testing.T) {
+func TestPersistentStore_Get(t *testing.T) {
 	t.Run("Error putting values in storage", func(t *testing.T) {
 		testPersistentStore := createTestPersistentStore[float64](t)
 
@@ -268,7 +268,7 @@ var inputEntries = []testPutData[string]{
 }
 
 // Testing PersistentStore.List()
-func TestPersistentStoreList(t *testing.T) {
+func TestPersistentStore_List(t *testing.T) {
 	testPersistentStore := createTestPersistentStore[string](t)
 	putValues(t, inputEntries, testPersistentStore)
 
@@ -335,7 +335,7 @@ func compareStoredEntriesWithInputEntries[T any](t *testing.T, inputEntries []te
 }
 
 // Testing PersistentStore.Entries()
-func TestPersistentStoreEntries(t *testing.T) {
+func TestPersistentStore_Entries(t *testing.T) {
 	testPersistentStore := createTestPersistentStore[string](t)
 	putValues(t, inputEntries, testPersistentStore)
 
@@ -348,7 +348,7 @@ func TestPersistentStoreEntries(t *testing.T) {
 }
 
 // Testing PersistentStore.Count()
-func TestPersistentStoreCount(t *testing.T) {
+func TestPersistentStore_Count(t *testing.T) {
 	testPersistentStore := createTestPersistentStore[string](t)
 	putValues(t, inputEntries, testPersistentStore)
 
