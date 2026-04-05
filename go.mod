@@ -12,6 +12,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.1
 	github.com/spf13/cobra v1.10.2
 	go.etcd.io/bbolt v1.4.3
+	github.com/google/go-cmp v0.7.0 
 )
 
 require (
