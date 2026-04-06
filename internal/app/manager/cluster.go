@@ -21,9 +21,9 @@ type Cluster struct {
 	// Need to include mutex to prevent multiple writes at the same time
 	mutex sync.RWMutex
 
-	WorkerClientMap map[uuid.UUID]*http.Client
+	workerClientMap map[uuid.UUID]*http.Client
 	// Will be updated periodically
-	WorkerNodes []*node.Node
+	workerNodes []*node.Node
 
 	clusterLogger logger.ManagerLogger
 }
@@ -31,8 +31,8 @@ type Cluster struct {
 // Create an empty map and empty slice nodes
 func NewCluster(clusterLogger logger.ManagerLogger) *Cluster {
 	return &Cluster{
-		WorkerClientMap: make(map[uuid.UUID]*http.Client, 0),
-		WorkerNodes:     make([]*node.Node, 0),
+		workerClientMap: make(map[uuid.UUID]*http.Client, 0),
+		workerNodes:     make([]*node.Node, 0),
 		clusterLogger:   clusterLogger,
 	}
 }
@@ -109,7 +109,7 @@ func (cluster *Cluster) UpdateWorkerNodes(state *State) {
 	cluster.detectNodeChanges(currNodes)
 	// Replace the slice of node in the struct entirely
 	cluster.mutex.Lock()
-	cluster.WorkerNodes = currNodes
+	cluster.workerNodes = currNodes
 	cluster.mutex.Unlock()
 }
 
@@ -235,7 +235,7 @@ func fetchTasks(workerHttpClient *http.Client) ([]*task.Task, error) {
 // Returns the created new task we sent
 func (cluster *Cluster) SendTask(targetWorkerId uuid.UUID, taskEvent task.TaskEvent) (*task.Task, error) {
 	cluster.mutex.RLock()
-	client, ok := cluster.WorkerClientMap[targetWorkerId]
+	client, ok := cluster.workerClientMap[targetWorkerId]
 	cluster.mutex.RUnlock()
 
 	if !ok {
@@ -303,7 +303,7 @@ func (cluster *Cluster) StopTask(state *State, taskIdToStop uuid.UUID) error {
 	}
 
 	cluster.mutex.RLock()
-	client, ok := cluster.WorkerClientMap[*workerId]
+	client, ok := cluster.workerClientMap[*workerId]
 	cluster.mutex.RUnlock()
 
 	if !ok {
@@ -343,7 +343,7 @@ func (cluster *Cluster) GetClient(workerId uuid.UUID) (*http.Client, error) {
 	cluster.mutex.RLock()
 	defer cluster.mutex.RUnlock()
 
-	client, ok := cluster.WorkerClientMap[workerId]
+	client, ok := cluster.workerClientMap[workerId]
 	if !ok {
 		return nil, fmt.Errorf("client of worker [%s] is not in the WorkerClientMap", workerId.String())
 	}
@@ -355,7 +355,7 @@ func (cluster *Cluster) AddClient(workerId uuid.UUID, client *http.Client) {
 	cluster.mutex.Lock()
 	defer cluster.mutex.Unlock()
 
-	cluster.WorkerClientMap[workerId] = client
+	cluster.workerClientMap[workerId] = client
 }
 
 // Copy the HTTP clients at this point to another slice
@@ -365,7 +365,7 @@ func (cluster *Cluster) createWorkerClientMapCopy() map[uuid.UUID]*http.Client {
 	defer cluster.mutex.RUnlock()
 
 	clientsCopy := make(map[uuid.UUID]*http.Client)
-	maps.Copy(clientsCopy, cluster.WorkerClientMap)
+	maps.Copy(clientsCopy, cluster.workerClientMap)
 
 	return clientsCopy
 }
@@ -374,9 +374,9 @@ func (cluster *Cluster) GetNodes() []node.Node {
 	cluster.mutex.RLock()
 	defer cluster.mutex.RUnlock()
 
-	copiedNodes := make([]node.Node, 0, len(cluster.WorkerNodes))
+	copiedNodes := make([]node.Node, 0, len(cluster.workerNodes))
 
-	for _, node := range cluster.WorkerNodes {
+	for _, node := range cluster.workerNodes {
 		copiedNode := *node
 		copiedNodes = append(copiedNodes, copiedNode)
 	}

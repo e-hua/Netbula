@@ -12,7 +12,7 @@ func TestEpvm_SelectCandidateNodes(t *testing.T) {
 	var s Scheduler = &Epvm{}
 
 	// Case 1: All nodes have enough disk space
-	nodes := []*node.Node{
+	nodes := []node.Node{
 		mockNode("Node1", 4, 1.0, 8000, 50, 100, 10), // 100 * (1-0.10) = 90 available
 		mockNode("Node2", 4, 1.0, 8000, 50, 200, 50), // 200 * (1-0.50) = 100 available
 	}
@@ -44,7 +44,7 @@ func TestEpvm_Score(t *testing.T) {
 	n1 := mockNode("Node1", 4, 2.0, 8000, 25, 100, 10)
 	// cpuLoad = 2.0 / 4 = 0.5
 	// memoryUsagePercent = 25 / 100 = 0.25 (in Epvm score it divides by 100)
-	nodes := []*node.Node{n1}
+	nodes := []node.Node{n1}
 
 	tsk := mockTask(2.0, 4000, 50)
 	// tsk.Cpu = 2.0. tsk.Memory = 4000
@@ -80,13 +80,13 @@ func TestEpvm_Pick(t *testing.T) {
 		n3.WorkerUuid: 3.8,
 	}
 
-	best := s.Pick(scores, []*node.Node{n1, n2, n3})
+	best := s.Pick(scores, []node.Node{n1, n2, n3})
 	if best == nil || best.Name != "Node2" {
 		t.Errorf("Expected to pick Node2, got %v", best)
 	}
 
 	// Empty candidate list
-	bestEmpty := s.Pick(scores, []*node.Node{})
+	bestEmpty := s.Pick(scores, []node.Node{})
 	if bestEmpty != nil {
 		t.Errorf("Expected `nil` when pick from empty list, got %v", bestEmpty)
 	}

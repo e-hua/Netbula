@@ -7,8 +7,8 @@ import (
 )
 
 // mockNode is a test helper for generating node.Node objects quickly
-func mockNode(name string, cores int, cpuLoad float64, memory int, memAllocPct float64, disk int, diskAllocPct float64) *node.Node {
-	return &node.Node{
+func mockNode(name string, cores int, cpuLoad float64, memory int, memAllocPct float64, disk int, diskAllocPct float64) node.Node {
+	return node.Node{
 		Name:                   name,
 		Cores:                  cores,
 		CpuAverageLoad:         cpuLoad,

@@ -10,7 +10,7 @@ import (
 func TestRoundRobin_SelectCandidateNodes(t *testing.T) {
 	var s Scheduler = &RoundRobin{}
 
-	nodes := []*node.Node{
+	nodes := []node.Node{
 		mockNode("Node1", 4, 1.0, 4000, 50, 100, 10),
 		mockNode("Node2", 4, 1.0, 4000, 50, 100, 10),
 	}
@@ -26,7 +26,7 @@ func TestRoundRobin_Score(t *testing.T) {
 	rr := &RoundRobin{LastWorkerIdx: 0}
 	var s Scheduler = rr
 
-	nodes := []*node.Node{
+	nodes := []node.Node{
 		mockNode("Node1", 4, 1.0, 4000, 50, 100, 10),
 		mockNode("Node2", 4, 1.0, 4000, 50, 100, 10),
 		mockNode("Node3", 4, 1.0, 4000, 50, 100, 10),
@@ -75,12 +75,12 @@ func TestRoundRobin_Pick(t *testing.T) {
 		n3.WorkerUuid: 1.0,
 	}
 
-	best := s.Pick(scores, []*node.Node{n1, n2, n3})
+	best := s.Pick(scores, []node.Node{n1, n2, n3})
 	if best == nil || best.Name != "Node2" {
 		t.Errorf("Expected to pick Node2, got %v", best)
 	}
 
-	bestEmpty := s.Pick(scores, []*node.Node{})
+	bestEmpty := s.Pick(scores, []node.Node{})
 	if bestEmpty != nil {
 		t.Errorf("Expected nil when pick from empty list, got %v", bestEmpty)
 	}

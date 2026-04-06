@@ -156,7 +156,7 @@ func (m *Manager) SelectWorker(t task.Task) (uuid.UUID, error) {
 	// Update the stats of all the nodes
 	m.UpdateWorkerNodes()
 
-	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerCluster.WorkerNodes)
+	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerCluster.GetNodes())
 
 	if candidates == nil {
 		msg := fmt.Sprintf("no available candidates match resource request for task %v", t.ID)
