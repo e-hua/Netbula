@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"io"
 	"log/slog"
 	"os"
 
@@ -19,7 +20,7 @@ type ManagerLogger struct {
 //
 // Set `allowVerbose` to be false if under deployment mode
 // Set it to be true if developing the application
-func NewManagerLogger(allowVerbose bool) *ManagerLogger {
+func NewManagerLogger(allowVerbose bool, writer io.Writer) *ManagerLogger {
 	var handler slog.Handler
 
 	// Set the minimum logging level for the new logger
@@ -29,13 +30,13 @@ func NewManagerLogger(allowVerbose bool) *ManagerLogger {
 
 		// Include the source file of the logging
 		options.AddSource = true
-		handler = slog.NewJSONHandler(os.Stderr, options)
+		handler = slog.NewJSONHandler(writer, options)
 	} else {
 		// Allowing only INFO, WARN and ERROR level
 		// DEBUG level logging will be quitely discarded
 		options := &slog.HandlerOptions{Level: slog.LevelInfo}
 
-		handler = slog.NewTextHandler(os.Stderr, options)
+		handler = slog.NewTextHandler(writer, options)
 	}
 
 	newLogger := slog.New(handler)

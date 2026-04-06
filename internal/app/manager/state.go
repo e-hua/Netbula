@@ -13,32 +13,35 @@ import (
 )
 
 // Stored and inferred states of manager
+
+// Caveat: Cannot use these private attributes outside the state.go file!
+// Should use the methods instead
 type State struct {
 	// Need to include mutex to prevent multiple writes at the same time
 	mutex sync.RWMutex
 
-	StateStores
+	stateStores
 
 	// These are the info inferred from the TaskWorkerDb on start of the application
-	Workers       []uuid.UUID
-	WorkerTaskMap map[uuid.UUID][]uuid.UUID
+	// Cannot be modified or accessed directly
+	workers       []uuid.UUID
+	workerTaskMap map[uuid.UUID][]uuid.UUID
 
 	stateLogger logger.ManagerLogger
 }
 
-type StateStores struct {
-	TaskDb       store.Store[task.Task]      // uuid -> task
-	EventDb      store.Store[task.TaskEvent] // uuid -> taskEvent
-	TaskWorkerDb store.Store[uuid.UUID]      // TaskUuid -> WorkerUuid
-	WorkerNameDb store.Store[string]         // uuid -> WorkerName
+type stateStores struct {
+	taskDb       store.Store[task.Task]      // uuid -> task
+	eventDb      store.Store[task.TaskEvent] // uuid -> taskEvent
+	taskWorkerDb store.Store[uuid.UUID]      // TaskUuid -> WorkerUuid
+	workerNameDb store.Store[string]         // uuid -> WorkerName
 }
 
 // Load the storage to the manager object
-// Panic if any error appears
-func NewState(stateStores StateStores, stateLogger logger.ManagerLogger) (*State, error) {
+func NewState(stateStores stateStores, stateLogger logger.ManagerLogger) (*State, error) {
 	newState := &State{
 		stateLogger: stateLogger,
-		StateStores: stateStores,
+		stateStores: stateStores,
 	}
 
 	err := newState.rehydrate()
@@ -55,7 +58,7 @@ func (state *State) rehydrate() error {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
-	taskWorkerEntries, err := state.TaskWorkerDb.Entries()
+	taskWorkerEntries, err := state.taskWorkerDb.Entries()
 	if err != nil {
 		return fmt.Errorf("failed to get entries from the DB mapping tasks to workers: %w", err)
 	}
@@ -81,7 +84,7 @@ func (state *State) rehydrate() error {
 		workerTaskMap[workerUuid] = assignedTaskSlice
 	}
 
-	workerNameEntries, err := state.WorkerNameDb.Entries()
+	workerNameEntries, err := state.workerNameDb.Entries()
 	if err != nil {
 		return fmt.Errorf("failed to get entries from the DB mapping worker UUID to worker names: %w", err)
 	}
@@ -102,8 +105,8 @@ func (state *State) rehydrate() error {
 	// Infer the content of the workers from the workerTaskMap
 	workers = slices.Collect(maps.Keys(workerTaskMap))
 
-	state.Workers = workers
-	state.WorkerTaskMap = workerTaskMap
+	state.workers = workers
+	state.workerTaskMap = workerTaskMap
 
 	return nil
 }
@@ -114,8 +117,8 @@ func (state *State) GetWorkerMetadata(id uuid.UUID) (workerName string, taskCoun
 	state.mutex.RLock()
 	defer state.mutex.RUnlock()
 
-	name, _ := state.WorkerNameDb.Get(id.String())
-	taskCount = len(state.WorkerTaskMap[id])
+	name, _ := state.workerNameDb.Get(id.String())
+	taskCount = len(state.workerTaskMap[id])
 
 	if name == nil {
 		return "unknown", taskCount
@@ -131,7 +134,7 @@ func (state *State) GetWorkerIds() []uuid.UUID {
 	defer state.mutex.RUnlock()
 
 	// Returns a copy of Ids
-	return append([]uuid.UUID(nil), state.Workers...)
+	return append([]uuid.UUID(nil), state.workers...)
 }
 
 // Add the name and the UUID of the worker to the state of the manager
@@ -140,20 +143,20 @@ func (state *State) RegisterWorker(workerUuid uuid.UUID, workerName string) erro
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
-	name, err := state.WorkerNameDb.Get(workerUuid.String())
+	name, err := state.workerNameDb.Get(workerUuid.String())
 
 	// If DB is tripping
 	if err != nil {
 		return fmt.Errorf("failed to read from the WorkerNameDb: %w", err)
 	}
 
-	err = state.WorkerNameDb.Put(workerUuid.String(), &workerName)
+	err = state.workerNameDb.Put(workerUuid.String(), &workerName)
 	if err != nil {
 		return fmt.Errorf("failed to write to the WorkerNameDb: %w", err)
 	}
 
 	if name == nil {
-		state.Workers = append(state.Workers, workerUuid)
+		state.workers = append(state.workers, workerUuid)
 		state.stateLogger.WorkerConnected(workerUuid)
 	} else {
 		state.stateLogger.WorkerReconnected(workerUuid)
@@ -166,7 +169,7 @@ func (state *State) UpdateTask(taskToUpdate *task.Task) error {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
-	existingTask, err := state.TaskDb.Get(taskToUpdate.ID.String())
+	existingTask, err := state.taskDb.Get(taskToUpdate.ID.String())
 	if err != nil {
 		return fmt.Errorf(
 			"failed to get task with UUID [%s] from TaskDb: %w",
@@ -194,7 +197,7 @@ func (state *State) UpdateTask(taskToUpdate *task.Task) error {
 	existingTask.ContainerID = taskToUpdate.ContainerID
 	existingTask.PortBindings = taskToUpdate.PortBindings
 
-	err = state.TaskDb.Put(taskToUpdate.ID.String(), existingTask)
+	err = state.taskDb.Put(taskToUpdate.ID.String(), existingTask)
 	if err != nil {
 		return fmt.Errorf("failed to put task with UUID [%s] into TaskDb: %w", taskToUpdate.ID.String(), err)
 	}
@@ -211,16 +214,16 @@ func (state *State) AssignTaskToWorker(taskToAssign *task.Task, workerId uuid.UU
 
 	taskToAssign.State = task.Scheduled
 
-	if err := state.TaskDb.Put(taskToAssign.ID.String(), taskToAssign); err != nil {
+	if err := state.taskDb.Put(taskToAssign.ID.String(), taskToAssign); err != nil {
 		return fmt.Errorf("failed to add task [%s] to TaskDb: %w", taskToAssign.ID.String(), err)
 	}
 
-	if err := state.TaskWorkerDb.Put(taskToAssign.ID.String(), &workerId); err != nil {
+	if err := state.taskWorkerDb.Put(taskToAssign.ID.String(), &workerId); err != nil {
 		return fmt.Errorf("failed to add worker [%s] to TaskWorkerDb: %w", taskToAssign.ID.String(), err)
 	}
 
-	if !slices.Contains(state.WorkerTaskMap[workerId], taskToAssign.ID) {
-		state.WorkerTaskMap[workerId] = append(state.WorkerTaskMap[workerId], taskToAssign.ID)
+	if !slices.Contains(state.workerTaskMap[workerId], taskToAssign.ID) {
+		state.workerTaskMap[workerId] = append(state.workerTaskMap[workerId], taskToAssign.ID)
 	}
 
 	return nil

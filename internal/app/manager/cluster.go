@@ -286,7 +286,10 @@ func postTask(workerHttpClient *http.Client, taskEvent task.TaskEvent, targetWor
 
 // TODO: Merge this method with SendTask
 func (cluster *Cluster) StopTask(state *State, taskIdToStop uuid.UUID) error {
-	workerId, err := state.TaskWorkerDb.Get(taskIdToStop.String())
+
+	// TODO: Add another method for this to prevent data race 
+	workerId, err := state.taskWorkerDb.Get(taskIdToStop.String())
+
 	if err != nil {
 		return fmt.Errorf("failed to get workerId from db: %w", err)
 	}

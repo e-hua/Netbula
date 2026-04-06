@@ -39,7 +39,7 @@ type Manager struct {
 	ManagerLogger logger.ManagerLogger
 }
 
-func createPersistentStateStores(managerDbPath string, managerDbFileMode os.FileMode) (*StateStores, error) {
+func createPersistentStateStores(managerDbPath string, managerDbFileMode os.FileMode) (*stateStores, error) {
 	db, err := bolt.Open(managerDbPath, managerDbFileMode, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the persistent DB for manager: %w", err)
@@ -65,26 +65,26 @@ func createPersistentStateStores(managerDbPath string, managerDbFileMode os.File
 		return nil, fmt.Errorf("failed to construct the persistent worker id to name DB: %w", err)
 	}
 
-	return &StateStores{
-		TaskDb:       persistentTaskDb,
-		EventDb:      persistentTaskEventDb,
-		TaskWorkerDb: persistentTaskToWorkerDb,
-		WorkerNameDb: persistentWorkerNameDb,
+	return &stateStores{
+		taskDb:       persistentTaskDb,
+		eventDb:      persistentTaskEventDb,
+		taskWorkerDb: persistentTaskToWorkerDb,
+		workerNameDb: persistentWorkerNameDb,
 	}, nil
 }
 
-func createInMemoryStores() (*StateStores, error) {
+func createInMemoryStores() *stateStores {
 	taskStorage := store.NewInMemoryStore[task.Task]()
 	taskEventStorage := store.NewInMemoryStore[task.TaskEvent]()
 	taskToWorkerStorage := store.NewInMemoryStore[uuid.UUID]()
 	workerNameStorage := store.NewInMemoryStore[string]()
 
-	return &StateStores{
-		TaskDb:       taskStorage,
-		EventDb:      taskEventStorage,
-		TaskWorkerDb: taskToWorkerStorage,
-		WorkerNameDb: workerNameStorage,
-	}, nil
+	return &stateStores{
+		taskDb:       taskStorage,
+		eventDb:      taskEventStorage,
+		taskWorkerDb: taskToWorkerStorage,
+		workerNameDb: workerNameStorage,
+	}
 }
 
 // Loading the DBs and process them in memory
@@ -197,7 +197,8 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 		}
 	}(taskEvent.Task)
 
-	err := m.State.EventDb.Put(taskEvent.ID.String(), &taskEvent)
+	// TODO: Add another method for this to prevent data race 
+	err := m.State.eventDb.Put(taskEvent.ID.String(), &taskEvent)
 	if err != nil {
 		retErr = fmt.Errorf("failed to put pending task event to EventDb: %w", err)
 		return targetEvent, retErr
@@ -249,7 +250,9 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 
 // Or use the scheduler to determine the best worker for the task
 func (m *Manager) determineWorker(taskEvent task.TaskEvent) (uuid.UUID, error) {
-	assignedWorker, _ := m.State.TaskWorkerDb.Get(taskEvent.Task.ID.String())
+	// TODO: Add another method for this to prevent data race 
+	assignedWorker, _ := m.State.taskWorkerDb.Get(taskEvent.Task.ID.String())
+
 	// If the task is already running
 	// Select worker we retreived
 	if assignedWorker != nil {

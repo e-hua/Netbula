@@ -119,7 +119,7 @@ func waitForWorkersForever(listener net.Listener, newManager *Manager) {
 }
 
 func Run(ports [2]int, verbose bool) {
-	managerLogger := logger.NewManagerLogger(verbose)
+	managerLogger := logger.NewManagerLogger(verbose, os.Stderr)
 
 	cfg, err := setupConfig(ports, *managerLogger)
 	if err != nil {

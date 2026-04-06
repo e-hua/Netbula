@@ -104,7 +104,9 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 
 // GET localhost:<Port>/tasks
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	tasks, err := a.Manager.State.TaskDb.List()
+	// TODO: Add another method for this to prevent data race 
+	tasks, err := a.Manager.State.taskDb.List()
+
 	if err != nil {
 		resErr := fmt.Errorf("failed to get tasks from TaskDb: %w", err)
 		routers.RespondError(responseWriter, http.StatusInternalServerError, resErr.Error())
@@ -139,7 +141,8 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 		return
 	}
 
-	taskToStop, err := a.Manager.State.TaskDb.Get(parsedId.String())
+	// TODO: Add another method for this to prevent data race 
+	taskToStop, err := a.Manager.State.taskDb.Get(parsedId.String())
 	if err != nil {
 		resErr = fmt.Errorf("failed to get task with ID [%s] from TaskDb: %w", parsedId.String(), err)
 		routers.RespondError(responseWriter, http.StatusNotFound, resErr.Error())
