@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 # Defines which target is run when no target is specified (i.e. When running `make` alone)
 
-.PHONY:fmt vet test build report 
+.PHONY:fmt vet test race build report 
 
 fmt: 
 	go fmt ./...
@@ -12,6 +12,9 @@ vet: fmt
 
 test: vet
 	go test -v -cover -coverprofile=c.out ./...
+
+race : vet
+	go test -v -race -cover -coverprofile=c.out ./...
 
 build: test 
 	go build -o bin/netbula main.go
