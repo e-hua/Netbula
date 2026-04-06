@@ -104,7 +104,7 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 
 // GET localhost:<Port>/tasks
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	// TODO: Add another method for this to prevent data race 
+	// TODO: Add another method for this to prevent data race
 	tasks, err := a.Manager.State.taskDb.List()
 
 	if err != nil {
@@ -141,7 +141,7 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 		return
 	}
 
-	// TODO: Add another method for this to prevent data race 
+	// TODO: Add another method for this to prevent data race
 	taskToStop, err := a.Manager.State.taskDb.Get(parsedId.String())
 	if err != nil {
 		resErr = fmt.Errorf("failed to get task with ID [%s] from TaskDb: %w", parsedId.String(), err)

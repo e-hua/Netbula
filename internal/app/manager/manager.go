@@ -197,7 +197,7 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 		}
 	}(taskEvent.Task)
 
-	// TODO: Add another method for this to prevent data race 
+	// TODO: Add another method for this to prevent data race
 	err := m.State.eventDb.Put(taskEvent.ID.String(), &taskEvent)
 	if err != nil {
 		retErr = fmt.Errorf("failed to put pending task event to EventDb: %w", err)
@@ -250,7 +250,7 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 
 // Or use the scheduler to determine the best worker for the task
 func (m *Manager) determineWorker(taskEvent task.TaskEvent) (uuid.UUID, error) {
-	// TODO: Add another method for this to prevent data race 
+	// TODO: Add another method for this to prevent data race
 	assignedWorker, _ := m.State.taskWorkerDb.Get(taskEvent.Task.ID.String())
 
 	// If the task is already running
