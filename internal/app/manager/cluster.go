@@ -72,25 +72,8 @@ func (cluster *Cluster) UpdateWorkerNodes(state *State) {
 
 			workerName, workerTaskCount := state.GetWorkerMetadata(workerUuid)
 
-			currNode := &node.Node{
-				Name: workerName,
-
-				Cores:             stats.CpuCount,
-				CpuAveragePercent: stats.CpuPercents[0],
-				CpuAverageLoad:    stats.LoadAvg,
-
-				Memory:                 int(stats.MemTotalInBytes),
-				MemoryAllocatedPercent: stats.MemUsedPercent,
-
-				Disk:                 int(stats.DiskTotalInBytes),
-				DiskAllocatedPercent: stats.DiskUsedPercent,
-
-				WorkerUuid: workerUuid,
-
-				TaskCount: workerTaskCount,
-			}
-
-			nodeChan <- currNode
+			currNode := node.StatsToNode(workerUuid, workerName, workerTaskCount, *stats)
+			nodeChan <- &currNode
 		})
 	}
 
