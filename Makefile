@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 # Defines which target is run when no target is specified (i.e. When running `make` alone)
 
-.PHONY:fmt vet test race build report 
+.PHONY:fmt vet test race build report total 
 
 fmt: 
 	go fmt ./...
@@ -21,3 +21,6 @@ build: test
 
 report: test 
 	go tool cover -html=c.out
+
+total: test 
+	go tool cover -func=c.out
