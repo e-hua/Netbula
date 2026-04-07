@@ -66,7 +66,9 @@ func Run(managerAddr string, token string, name string) {
 
 		api := Api{
 			Session: session,
-			Worker:  newWorker,
+			Handlers: Handlers{
+				Worker: newWorker,
+			},
 		}
 
 		// This is a blocking call
