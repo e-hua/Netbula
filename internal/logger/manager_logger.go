@@ -85,14 +85,7 @@ func (m *ManagerLogger) TaskStatusChanged(prevTask task.Task, newTask task.Task)
 
 // Triggered when `UpdateWorkerNodes` in /internal/app/manager/cluster.go is invoked
 func (m *ManagerLogger) WorkerNodesUpdated(nodes []*node.Node) {
-	var nodeLogValues []slog.Value
-
-	for _, nodeVal := range nodes {
-		nodeLogValues = append(nodeLogValues, nodeVal.LogValue())
-	}
-
-	// Less important since the API for showing worker stats is provided
-	m.Debug("Worker nodes stats updated", "nodes", nodeLogValues)
+	m.Debug("Worker nodes stats updated", "nodes", nodes)
 }
 
 // Detected by `RegisterWorker` in /internal/app/manager/state.go

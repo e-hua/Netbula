@@ -228,3 +228,10 @@ func (state *State) AssignTaskToWorker(taskToAssign *task.Task, workerId uuid.UU
 
 	return nil
 }
+
+func (state *State) GetTasks() ([]*task.Task, error) {
+	state.mutex.RLock()
+	defer state.mutex.RUnlock()
+
+	return state.taskDb.List()
+}
