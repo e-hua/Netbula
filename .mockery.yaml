@@ -1,0 +1,8 @@
+dir: "./internal/mocks"
+pkgname: mocks
+packages:
+  github.com/e-hua/netbula/internal/app/manager:
+    config:
+      filename: "manager_mocks.go"
+    interfaces:
+      Cluster:
