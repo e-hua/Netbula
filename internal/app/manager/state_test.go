@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/e-hua/netbula/internal/logger"
 	"github.com/e-hua/netbula/internal/task"
@@ -41,7 +42,7 @@ func insertMockData(testStore *stateStores) {
 	testStore.workerNameDb.Put(testWorker3Id.String(), &testWorker3Name)
 }
 
-func createTestState(t *testing.T, testStore *stateStores) (*State, *bytes.Buffer) {
+func createTestState(t *testing.T, testStore *stateStores) (*MappingStorage, *bytes.Buffer) {
 	t.Helper()
 
 	var logBuf bytes.Buffer
@@ -56,7 +57,7 @@ func createTestState(t *testing.T, testStore *stateStores) (*State, *bytes.Buffe
 }
 
 func TestWorkerManagement(t *testing.T) {
-	testInMemoryStore := createInMemoryStores()
+	testInMemoryStore := CreateInMemoryStores()
 	testState, testLogBuffer := createTestState(t, testInMemoryStore)
 
 	workerUuid := uuid.New()
@@ -115,7 +116,7 @@ func TestWorkerManagement(t *testing.T) {
 }
 
 func Test_rehydrate(t *testing.T) {
-	testStore := createInMemoryStores()
+	testStore := CreateInMemoryStores()
 	insertMockData(testStore)
 	testState, _ := createTestState(t, testStore)
 
@@ -157,7 +158,7 @@ func Test_rehydrate(t *testing.T) {
 }
 
 func TestTaskManagement(t *testing.T) {
-	testInMemoryStore := createInMemoryStores()
+	testInMemoryStore := CreateInMemoryStores()
 	testState, _ := createTestState(t, testInMemoryStore)
 
 	testWorkerId := uuid.New()
@@ -173,16 +174,32 @@ func TestTaskManagement(t *testing.T) {
 		State: task.Pending,
 	}
 
-	err = testState.AssignTaskToWorker(&testTask, testWorkerId)
+	// `AssignTaskToWorker`
+	newTaskAssigned, err := testState.AssignTaskToWorker(testTask, testWorkerId)
 	if err != nil {
 		t.Fatalf("Failed to assign task %#v to the worker with UUID %s : %v", testTask, testWorkerId.String(), err)
 	}
 
-	// Assigning the task to worker will turn the state of task from "pending" to "scheduled"
-	if testTask.State != task.Scheduled {
-		t.Errorf("Expected the state of testTask to be [%s], got [%s] instead", task.Scheduled.String(), testTask.State.String())
+	// `GetAssignedWorker`
+	testWorkerIdFromState, err := testState.GetAssignedWorker(testTask.ID)
+	if err != nil {
+		t.Errorf("Failed to get the worker assigned to the task: %v", err)
 	}
 
+	if testWorkerIdFromState.String() != testWorkerId.String() {
+		t.Errorf(
+			"Expected the worker assigned to the task to be: %s, got %s",
+			testWorkerIdFromState.String(),
+			testWorkerId.String(),
+		)
+	}
+
+	// Assigning the task to worker will turn the state of task from "pending" to "scheduled"
+	if newTaskAssigned.State != task.Scheduled {
+		t.Errorf("Expected the state of task returned by `AssignTaskToWorker` to be [%s], got [%s] instead", task.Scheduled.String(), testTask.State.String())
+	}
+
+	// `GetWorkerMetadata`
 	_, taskAssignedCount := testState.GetWorkerMetadata(testWorkerId)
 	if taskAssignedCount != 1 {
 		t.Errorf("Expected the number of task assigned to be 1, got %d instead", taskAssignedCount)
@@ -191,12 +208,14 @@ func TestTaskManagement(t *testing.T) {
 	testTaskCopy := testTask
 	testTaskCopy.State = task.Completed
 
+	// `UpdateTask`
 	err = testState.UpdateTask(&testTaskCopy)
 	if err != nil {
 		t.Errorf("Error updating the testState with new task: %v", err)
 	}
 
-	updatedTask, err := testState.taskDb.Get(testTask.ID.String())
+	// `GetTask`
+	updatedTask, err := testState.GetTask(testTask.ID)
 	if err != nil {
 		t.Errorf("Error getting the updated task from testState: %v", err)
 	}
@@ -206,12 +225,38 @@ func TestTaskManagement(t *testing.T) {
 	}
 }
 
+func TestUpdateTaskEvent(t *testing.T) {
+	testInMemoryStore := CreateInMemoryStores()
+	testState, _ := createTestState(t, testInMemoryStore)
+
+	dummyTaskEvent := task.TaskEvent{
+		ID:          uuid.New(),
+		TargetState: task.Completed,
+		Timestamp:   time.Now(),
+		Task: task.Task{
+			ID:    uuid.New(),
+			State: task.Pending,
+		},
+	}
+
+	testState.UpdateTaskEvent(dummyTaskEvent)
+
+	testTaskEventFromStore, err := testInMemoryStore.eventDb.Get(dummyTaskEvent.ID.String())
+	if err != nil {
+		t.Errorf("Error getting task event from mock store: %v", err)
+	}
+
+	if diff := cmp.Diff(dummyTaskEvent, *testTaskEventFromStore); diff != "" {
+		t.Errorf("Expected the taskEvent we stored to be the same as we retrieved, got difference of %s", diff)
+	}
+}
+
 // Detect the data race bug
 // By spinning up many Go routines to modify the same storage at the same time
 
 // Should use `go test -race ./...` when testing this
 func TestState_Concurrent(t *testing.T) {
-	testInMemoryStore := createInMemoryStores()
+	testInMemoryStore := CreateInMemoryStores()
 	insertMockData(testInMemoryStore)
 	testState, _ := createTestState(t, testInMemoryStore)
 
@@ -233,7 +278,7 @@ func TestState_Concurrent(t *testing.T) {
 						State: task.Pending,
 					}
 
-					err := testState.AssignTaskToWorker(&newTask, workerUUid)
+					_, err := testState.AssignTaskToWorker(newTask, workerUUid)
 					if err != nil {
 						t.Errorf("Failed to assign task [%s] to worker [%s]: %v", newTask.ID.String(), workerUUid.String(), err)
 					}

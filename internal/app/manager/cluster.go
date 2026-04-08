@@ -17,7 +17,7 @@ import (
 )
 
 // A cluster of connections to worker nodes
-type Cluster struct {
+type HttpClientCluster struct {
 	// Need to include mutex to prevent multiple writes at the same time
 	mutex sync.RWMutex
 
@@ -29,8 +29,8 @@ type Cluster struct {
 }
 
 // Create an empty map and empty slice nodes
-func NewCluster(clusterLogger logger.ManagerLogger) *Cluster {
-	return &Cluster{
+func NewCluster(clusterLogger logger.ManagerLogger) *HttpClientCluster {
+	return &HttpClientCluster{
 		workerClientMap: make(map[uuid.UUID]*http.Client, 0),
 		workerNodes:     make([]*node.Node, 0),
 		clusterLogger:   clusterLogger,
@@ -41,7 +41,7 @@ func NewCluster(clusterLogger logger.ManagerLogger) *Cluster {
 // Fire http requests to the clients in parallel
 // Getting node stats
 // And Update the stats of the nodes
-func (cluster *Cluster) UpdateWorkerNodes(state *State) {
+func (cluster *HttpClientCluster) UpdateWorkerNodes(state State) {
 	// Get a copy of the slices of the current worker UUIDs
 	workers := state.GetWorkerIds()
 	// Create the node slice to replace current worker nodes
@@ -96,7 +96,7 @@ func (cluster *Cluster) UpdateWorkerNodes(state *State) {
 	cluster.mutex.Unlock()
 }
 
-func (cluster *Cluster) detectNodeChanges(newNodes []*node.Node) {
+func (cluster *HttpClientCluster) detectNodeChanges(newNodes []*node.Node) {
 	oldNodes := cluster.GetNodes()
 	oldNodesMap := make(map[uuid.UUID]node.Node)
 	newNodesMap := make(map[uuid.UUID]node.Node)
@@ -144,7 +144,7 @@ func fetchNodeStats(workerHttpClient *http.Client) (*types.Stats, error) {
 // Fire http requests to the clients in parallel
 // Getting task statuses straight from the worker in charge of them
 // And Update the statuses of the tasks
-func (cluster *Cluster) SyncTasks(state *State) {
+func (cluster *HttpClientCluster) SyncTasks(state State) {
 	// Get a copy of the slices of the current worker UUIDs
 	workers := state.GetWorkerIds()
 
@@ -216,7 +216,7 @@ func fetchTasks(workerHttpClient *http.Client) ([]*task.Task, error) {
 // Sends the task to the target worker
 //
 // Returns the created new task we sent
-func (cluster *Cluster) SendTask(targetWorkerId uuid.UUID, taskEvent task.TaskEvent) (*task.Task, error) {
+func (cluster *HttpClientCluster) SendTask(targetWorkerId uuid.UUID, taskEvent task.TaskEvent) (*task.Task, error) {
 	cluster.mutex.RLock()
 	client, ok := cluster.workerClientMap[targetWorkerId]
 	cluster.mutex.RUnlock()
@@ -268,32 +268,16 @@ func postTask(workerHttpClient *http.Client, taskEvent task.TaskEvent, targetWor
 }
 
 // TODO: Merge this method with SendTask
-func (cluster *Cluster) StopTask(state *State, taskIdToStop uuid.UUID) error {
-
-	// TODO: Add another method for this to prevent data race
-	workerId, err := state.taskWorkerDb.Get(taskIdToStop.String())
-
-	if err != nil {
-		return fmt.Errorf("failed to get workerId from db: %w", err)
-	}
-
-	if workerId == nil {
-		return fmt.Errorf(
-			"failed to get workerId related to taskId [%s] (probably because the key is not in the bucket): %w",
-			taskIdToStop.String(),
-			err,
-		)
-	}
-
+func (cluster *HttpClientCluster) StopTask(targetWorkerId uuid.UUID, taskIdToStop uuid.UUID) error {
 	cluster.mutex.RLock()
-	client, ok := cluster.workerClientMap[*workerId]
+	client, ok := cluster.workerClientMap[targetWorkerId]
 	cluster.mutex.RUnlock()
 
 	if !ok {
-		return fmt.Errorf("failed to get HTTP client for taget worker with UUID [%s]", workerId.String())
+		return fmt.Errorf("failed to get HTTP client for taget worker with UUID [%s]", targetWorkerId.String())
 	}
 
-	err = deleteTask(client, taskIdToStop, *workerId)
+	err := deleteTask(client, taskIdToStop, targetWorkerId)
 	if err != nil {
 		return fmt.Errorf("failed to delete the task with UUID [%s]: %w", taskIdToStop.String(), err)
 	}
@@ -322,7 +306,7 @@ func deleteTask(workerHttpClient *http.Client, taskId uuid.UUID, workerId uuid.U
 }
 
 // Retrieve the HTTP client(of the worker with the UUID in the params) from the cluster
-func (cluster *Cluster) GetClient(workerId uuid.UUID) (*http.Client, error) {
+func (cluster *HttpClientCluster) GetClient(workerId uuid.UUID) (*http.Client, error) {
 	cluster.mutex.RLock()
 	defer cluster.mutex.RUnlock()
 
@@ -334,7 +318,7 @@ func (cluster *Cluster) GetClient(workerId uuid.UUID) (*http.Client, error) {
 	return client, nil
 }
 
-func (cluster *Cluster) AddClient(workerId uuid.UUID, client *http.Client) {
+func (cluster *HttpClientCluster) AddClient(workerId uuid.UUID, client *http.Client) {
 	cluster.mutex.Lock()
 	defer cluster.mutex.Unlock()
 
@@ -343,7 +327,7 @@ func (cluster *Cluster) AddClient(workerId uuid.UUID, client *http.Client) {
 
 // Copy the HTTP clients at this point to another slice
 // Lock the mutex while reading
-func (cluster *Cluster) createWorkerClientMapCopy() map[uuid.UUID]*http.Client {
+func (cluster *HttpClientCluster) createWorkerClientMapCopy() map[uuid.UUID]*http.Client {
 	cluster.mutex.RLock()
 	defer cluster.mutex.RUnlock()
 
@@ -353,7 +337,7 @@ func (cluster *Cluster) createWorkerClientMapCopy() map[uuid.UUID]*http.Client {
 	return clientsCopy
 }
 
-func (cluster *Cluster) GetNodes() []node.Node {
+func (cluster *HttpClientCluster) GetNodes() []node.Node {
 	cluster.mutex.RLock()
 	defer cluster.mutex.RUnlock()
 

@@ -16,7 +16,7 @@ import (
 
 // Caveat: Cannot use these private attributes outside the state.go file!
 // Should use the methods instead
-type State struct {
+type MappingStorage struct {
 	// Need to include mutex to prevent multiple writes at the same time
 	mutex sync.RWMutex
 
@@ -38,8 +38,8 @@ type stateStores struct {
 }
 
 // Load the storage to the manager object
-func NewState(stateStores stateStores, stateLogger logger.ManagerLogger) (*State, error) {
-	newState := &State{
+func NewState(stateStores stateStores, stateLogger logger.ManagerLogger) (*MappingStorage, error) {
+	newState := &MappingStorage{
 		stateLogger: stateLogger,
 		stateStores: stateStores,
 	}
@@ -53,7 +53,7 @@ func NewState(stateStores stateStores, stateLogger logger.ManagerLogger) (*State
 }
 
 // Infer the fields like Workers and WorkerTaskMap from loaded storage
-func (state *State) rehydrate() error {
+func (state *MappingStorage) rehydrate() error {
 	// Locked entirely, other cannot read or write
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
@@ -112,7 +112,7 @@ func (state *State) rehydrate() error {
 }
 
 // Get the name and the number of tasks of a worker
-func (state *State) GetWorkerMetadata(id uuid.UUID) (workerName string, taskCount int) {
+func (state *MappingStorage) GetWorkerMetadata(id uuid.UUID) (workerName string, taskCount int) {
 	// Locks for reading, other cannot write
 	state.mutex.RLock()
 	defer state.mutex.RUnlock()
@@ -128,7 +128,7 @@ func (state *State) GetWorkerMetadata(id uuid.UUID) (workerName string, taskCoun
 }
 
 // Get the UUID of the workers
-func (state *State) GetWorkerIds() []uuid.UUID {
+func (state *MappingStorage) GetWorkerIds() []uuid.UUID {
 	// Locks for reading, other cannot write
 	state.mutex.RLock()
 	defer state.mutex.RUnlock()
@@ -138,7 +138,7 @@ func (state *State) GetWorkerIds() []uuid.UUID {
 }
 
 // Add the name and the UUID of the worker to the state of the manager
-func (state *State) RegisterWorker(workerUuid uuid.UUID, workerName string) error {
+func (state *MappingStorage) RegisterWorker(workerUuid uuid.UUID, workerName string) error {
 	// Locks entirely
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
@@ -165,7 +165,7 @@ func (state *State) RegisterWorker(workerUuid uuid.UUID, workerName string) erro
 	return nil
 }
 
-func (state *State) UpdateTask(taskToUpdate *task.Task) error {
+func (state *MappingStorage) UpdateTask(taskToUpdate *task.Task) error {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
@@ -208,30 +208,51 @@ func (state *State) UpdateTask(taskToUpdate *task.Task) error {
 // Add task to TaskDb
 // Link task to worker in TaskWorkerDb
 // Link worker to task in WorkerTaskMap
-func (state *State) AssignTaskToWorker(taskToAssign *task.Task, workerId uuid.UUID) error {
+func (state *MappingStorage) AssignTaskToWorker(taskToAssign task.Task, workerId uuid.UUID) (*task.Task, error) {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
 
 	taskToAssign.State = task.Scheduled
 
-	if err := state.taskDb.Put(taskToAssign.ID.String(), taskToAssign); err != nil {
-		return fmt.Errorf("failed to add task [%s] to TaskDb: %w", taskToAssign.ID.String(), err)
+	if err := state.taskDb.Put(taskToAssign.ID.String(), &taskToAssign); err != nil {
+		return nil, fmt.Errorf("failed to add task [%s] to TaskDb: %w", taskToAssign.ID.String(), err)
 	}
 
 	if err := state.taskWorkerDb.Put(taskToAssign.ID.String(), &workerId); err != nil {
-		return fmt.Errorf("failed to add worker [%s] to TaskWorkerDb: %w", taskToAssign.ID.String(), err)
+		return nil, fmt.Errorf("failed to add worker [%s] to TaskWorkerDb: %w", taskToAssign.ID.String(), err)
 	}
 
 	if !slices.Contains(state.workerTaskMap[workerId], taskToAssign.ID) {
 		state.workerTaskMap[workerId] = append(state.workerTaskMap[workerId], taskToAssign.ID)
 	}
 
-	return nil
+	return &taskToAssign, nil
 }
 
-func (state *State) GetTasks() ([]*task.Task, error) {
+func (state *MappingStorage) GetTasks() ([]*task.Task, error) {
 	state.mutex.RLock()
 	defer state.mutex.RUnlock()
 
 	return state.taskDb.List()
+}
+
+func (state *MappingStorage) GetTask(taskId uuid.UUID) (*task.Task, error) {
+	state.mutex.RLock()
+	defer state.mutex.RUnlock()
+
+	return state.taskDb.Get(taskId.String())
+}
+
+func (state *MappingStorage) GetAssignedWorker(taskId uuid.UUID) (*uuid.UUID, error) {
+	state.mutex.RLock()
+	defer state.mutex.RUnlock()
+
+	return state.taskWorkerDb.Get(taskId.String())
+}
+
+func (state *MappingStorage) UpdateTaskEvent(taskEvent task.TaskEvent) error {
+	state.mutex.Lock()
+	defer state.mutex.Unlock()
+
+	return state.eventDb.Put(taskEvent.ID.String(), &taskEvent)
 }

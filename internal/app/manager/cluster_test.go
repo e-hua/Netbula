@@ -108,7 +108,7 @@ func createTestWorker(workerData testWorkerData) (*worker.Worker, []task.Task) {
 
 // A helper function that creates a Cluster component and
 // returns a buffer containing the logs
-func createTestCluster() (*Cluster, *bytes.Buffer) {
+func createTestCluster() (*HttpClientCluster, *bytes.Buffer) {
 	var testLogsBuffer bytes.Buffer
 	testLogger := logger.NewManagerLogger(true, &testLogsBuffer)
 
@@ -281,7 +281,7 @@ func TestCluster_NodesStateManagement(t *testing.T) {
 		t.Run(testCase.testName, func(t *testing.T) {
 			testCluster, testClusterLogsBuffer := createTestCluster()
 
-			mockStateStore := createInMemoryStores()
+			mockStateStore := CreateInMemoryStores()
 
 			// Add all the clients in this test case to the cluster
 			for _, testWorkerDataEntry := range testCase.workerData {
@@ -382,7 +382,7 @@ func TestCluster_TaskManagement(t *testing.T) {
 			testCluster, testClusterLogsBuffer := createTestCluster()
 			testClusterLogsDecoder := json.NewDecoder(testClusterLogsBuffer)
 
-			mockStateStore := createInMemoryStores()
+			mockStateStore := CreateInMemoryStores()
 
 			workerMap := make(map[uuid.UUID]*worker.Worker)
 
@@ -450,7 +450,7 @@ func TestCluster_TaskManagement(t *testing.T) {
 
 				taskSentBackFromWorker, err := testCluster.SendTask(workerValue.Uuid, newTaskEventToSend)
 				if err != nil {
-					t.Errorf("Failed to send the task %v to worker %s", newTaskToSend, workerValue.Uuid.String())
+					t.Errorf("Failed to send the task %#v to worker %s: %v", newTaskToSend, workerValue.Uuid.String(), err)
 				}
 
 				if taskSentBackFromWorker.ID.String() == newTaskToSend.ID.String() {
