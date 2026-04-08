@@ -1,9 +1,23 @@
+# Define the variables needed for the initialization step 
+BIN_DIR := $(CURDIR)/bin
+MOCKERY_BIN_PATH := $(BIN_DIR)/mockery
+
 .DEFAULT_GOAL := build
 # Defines which target is run when no target is specified (i.e. When running `make` alone)
 
-.PHONY:fmt vet test race build report total 
+.PHONY: mock fmt vet test race build report total clean 
 
-fmt: 
+# Set up the `mockery` binary  
+# Make it local to the project to prevent conflicts between different versions of mockery 
+$(MOCKERY_BIN_PATH):
+	@mkdir -p $(BIN_DIR)
+# Using the environment variable `GOBIN` to specify where to download the binary 
+	GOBIN=$(BIN_DIR) go install github.com/vektra/mockery/v3@v3.7.0
+
+mock: $(MOCKERY_BIN_PATH)
+	$(MOCKERY_BIN_PATH)
+
+fmt: mock 
 	go fmt ./...
 
 # The target 'vet' depends on target 'fmt'
@@ -24,3 +38,7 @@ report: test
 
 total: test 
 	go tool cover -func=c.out
+
+clean:  
+	rm -rf $(BIN_DIR)
+	rm -rf mocks
