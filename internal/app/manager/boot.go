@@ -22,6 +22,9 @@ import (
 const (
 	ManagerConfigDirPath  = "."
 	ManagerConfigFileName = "manager_config.json"
+
+	ManagerDbPath                 = "manager.db"
+	ManagerDbFileMode os.FileMode = 0600
 )
 
 func createTlsListener(cert tls.Certificate, token string, port string) (net.Listener, error) {
@@ -139,7 +142,13 @@ func Run(ports [2]int, verbose bool) {
 		managerLogger.TerminateApplication("Failed to initialize TCP listener with TLS encryption", err)
 	}
 
-	newManager, err := New(&scheduler.Epvm{}, *managerLogger)
+	stateStores, err := CreatePersistentStateStores(ManagerDbPath, ManagerDbFileMode)
+	if err != nil {
+		// Shutting down
+		managerLogger.TerminateApplication("Failed to create DBs providing persistent storage for manager", err)
+	}
+
+	newManager, err := New(&scheduler.Epvm{}, *managerLogger, stateStores)
 	if err != nil {
 		// Shutting down
 		managerLogger.TerminateApplication("Failed to initialize manager", err)
