@@ -23,23 +23,47 @@ const (
 	SendTasksPeriod   = 15 * time.Second
 )
 
-const (
-	ManagerDbPath                 = "manager.db"
-	ManagerDbFileMode os.FileMode = 0600
-)
+type Cluster interface {
+	UpdateWorkerNodes(state State)
+	SyncTasks(state State)
+
+	SendTask(targetWorkerId uuid.UUID, taskEvent task.TaskEvent) (*task.Task, error)
+	StopTask(targetWorkerId uuid.UUID, taskIdToStop uuid.UUID) error
+
+	GetClient(workerId uuid.UUID) (*http.Client, error)
+	AddClient(workerId uuid.UUID, client *http.Client)
+
+	GetNodes() []node.Node
+}
+
+type State interface {
+	GetWorkerMetadata(id uuid.UUID) (workerName string, taskCount int)
+	GetWorkerIds() []uuid.UUID
+
+	RegisterWorker(workerUuid uuid.UUID, workerName string) error
+
+	GetTasks() ([]*task.Task, error)
+	UpdateTask(taskToUpdate *task.Task) error
+	GetTask(taskId uuid.UUID) (*task.Task, error)
+
+	UpdateTaskEvent(taskEventToUpdate task.TaskEvent) error
+
+	AssignTaskToWorker(taskToAssign task.Task, workerId uuid.UUID) (*task.Task, error)
+	GetAssignedWorker(taskId uuid.UUID) (workerId *uuid.UUID, err error)
+}
 
 type Manager struct {
-	State         *State
-	WorkerCluster *Cluster
+	State         State
+	WorkerCluster Cluster
 
-	// Queue of pending taskevents
+	// Queue of pending TaskEvents
 	Pending   queue.Queue
 	Scheduler scheduler.Scheduler
 
 	ManagerLogger logger.ManagerLogger
 }
 
-func createPersistentStateStores(managerDbPath string, managerDbFileMode os.FileMode) (*stateStores, error) {
+func CreatePersistentStateStores(managerDbPath string, managerDbFileMode os.FileMode) (*stateStores, error) {
 	db, err := bolt.Open(managerDbPath, managerDbFileMode, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the persistent DB for manager: %w", err)
@@ -73,7 +97,7 @@ func createPersistentStateStores(managerDbPath string, managerDbFileMode os.File
 	}, nil
 }
 
-func createInMemoryStores() *stateStores {
+func CreateInMemoryStores() *stateStores {
 	taskStorage := store.NewInMemoryStore[task.Task]()
 	taskEventStorage := store.NewInMemoryStore[task.TaskEvent]()
 	taskToWorkerStorage := store.NewInMemoryStore[uuid.UUID]()
@@ -90,12 +114,7 @@ func createInMemoryStores() *stateStores {
 // Loading the DBs and process them in memory
 // Infer the rest of the fields before
 // Creating a new manager struct with no HTTP connections between workers
-func New(scheduler scheduler.Scheduler, managerLogger logger.ManagerLogger) (*Manager, error) {
-	stateStores, err := createPersistentStateStores(ManagerDbPath, ManagerDbFileMode)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create DBs providing persistent storage for manager: %w", err)
-	}
-
+func New(scheduler scheduler.Scheduler, managerLogger logger.ManagerLogger, stateStores *stateStores) (*Manager, error) {
 	loadedStates, err := NewState(*stateStores, *logger.NewManagerLoggerWithSubsystem(managerLogger, "state"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create the State component storing mappings: %w", err)
@@ -103,17 +122,22 @@ func New(scheduler scheduler.Scheduler, managerLogger logger.ManagerLogger) (*Ma
 
 	createdCluster := NewCluster(*logger.NewManagerLoggerWithSubsystem(managerLogger, "worker_cluster"))
 
-	m := &Manager{
-		State:         loadedStates,
-		WorkerCluster: createdCluster,
+	m := NewManager(loadedStates, createdCluster, scheduler, managerLogger)
+
+	return m, nil
+}
+
+// Dummy function for testing
+func NewManager(state State, cluster Cluster, scheduler scheduler.Scheduler, managerLogger logger.ManagerLogger) *Manager {
+	return &Manager{
+		State:         state,
+		WorkerCluster: cluster,
 
 		Pending:   *queue.New(),
 		Scheduler: scheduler,
 
 		ManagerLogger: managerLogger,
 	}
-
-	return m, nil
 }
 
 // Iterate through all the UUIDs in the current state of the manager
@@ -158,8 +182,8 @@ func (m *Manager) SelectWorker(t task.Task) (uuid.UUID, error) {
 
 	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerCluster.GetNodes())
 
-	if candidates == nil {
-		msg := fmt.Sprintf("no available candidates match resource request for task %v", t.ID)
+	if len(candidates) == 0 {
+		msg := fmt.Sprintf("no available candidates match resource request for task `%s`", t.ID.String())
 		err := errors.New(msg)
 		return uuid.Nil, err
 	}
@@ -197,24 +221,16 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 		}
 	}(taskEvent.Task)
 
-	// TODO: Add another method for this to prevent data race
-	err := m.State.eventDb.Put(taskEvent.ID.String(), &taskEvent)
+	// This is like a log for the taskEvent we removed from the queue
+	err := m.State.UpdateTaskEvent(taskEvent)
 	if err != nil {
 		retErr = fmt.Errorf("failed to put pending task event to EventDb: %w", err)
 		return targetEvent, retErr
 	}
 
-	// Find the worker already running the task
-	// or use Scheduler to determine the worker
-	assignedWorkerId, err := m.determineWorker(taskEvent)
-	if err != nil {
-		retErr = fmt.Errorf("failed to schedule the task: %w", err)
-		return targetEvent, retErr
-	}
-
 	// TODO: Make `STOP` and other state transitions share the same API
 	// Work is to stop the task
-	if taskEvent.Task.State == task.Completed {
+	if taskEvent.TargetState == task.Completed {
 		err = m.stopTask(taskEvent.Task.ID)
 		if err != nil {
 			retErr = fmt.Errorf("error stopping task: %w", err)
@@ -225,11 +241,21 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 		return targetEvent, nil
 	}
 
+	// Find the worker already running the task
+	// or use Scheduler to determine the worker
+	assignedWorkerId, err := m.determineWorker(taskEvent)
+	if err != nil {
+		retErr = fmt.Errorf("failed to schedule the task: %w", err)
+		return targetEvent, retErr
+	}
+
 	// Assign task to the worker
 	// And store the assignment relations
-	if err := m.State.AssignTaskToWorker(&taskEvent.Task, assignedWorkerId); err != nil {
-		retErr = fmt.Errorf("failed to assigning task to worker: %w", err)
+	if newAssignedTask, err := m.State.AssignTaskToWorker(taskEvent.Task, assignedWorkerId); err != nil {
+		retErr = fmt.Errorf("failed to assign task to worker: %w", err)
 		return targetEvent, retErr
+	} else {
+		targetEvent.Task = *newAssignedTask
 	}
 
 	_, err = m.WorkerCluster.SendTask(assignedWorkerId, taskEvent)
@@ -250,8 +276,7 @@ func (m *Manager) SendWork() (targetEvent *task.TaskEvent, retErr error) {
 
 // Or use the scheduler to determine the best worker for the task
 func (m *Manager) determineWorker(taskEvent task.TaskEvent) (uuid.UUID, error) {
-	// TODO: Add another method for this to prevent data race
-	assignedWorker, _ := m.State.taskWorkerDb.Get(taskEvent.Task.ID.String())
+	assignedWorker, _ := m.State.GetAssignedWorker(taskEvent.Task.ID)
 
 	// If the task is already running
 	// Select worker we retreived
@@ -267,8 +292,22 @@ func (m *Manager) AddTaskEvent(te task.TaskEvent) {
 	m.Pending.Enqueue(te)
 }
 
-func (m *Manager) stopTask(taskId uuid.UUID) error {
-	return m.WorkerCluster.StopTask(m.State, taskId)
+func (m *Manager) stopTask(taskIdToStop uuid.UUID) error {
+	workerId, err := m.State.GetAssignedWorker(taskIdToStop)
+
+	if err != nil {
+		return fmt.Errorf("failed to get workerId from db: %w", err)
+	}
+
+	if workerId == nil {
+		return fmt.Errorf(
+			"failed to get workerId related to taskId [%s] (probably because the key is not in the bucket): %w",
+			taskIdToStop.String(),
+			err,
+		)
+	}
+
+	return m.WorkerCluster.StopTask(*workerId, taskIdToStop)
 }
 
 // Runs an infinite loop to sync the state of the manager with the workers
