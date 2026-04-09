@@ -6,3 +6,4 @@ packages:
       filename: "manager_mocks.go"
     interfaces:
       Cluster:
+      ManagerService:
