@@ -3,12 +3,14 @@ package manager
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/logger"
 	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/e-hua/netbula/internal/node"
@@ -22,16 +24,39 @@ import (
 // The Api receiving requests from localhost:<Port>
 type Api struct {
 	Port     int
-	Manager  *Manager
+	Manager  ManagerService
 	Router   *chi.Mux
 	TlsToken string
 
 	Logger logger.ManagerLogger
 }
 
-func (a *Api) initRouter() {
+type ManagerService interface {
+	// Managing workers
+	UpdateWorkerNodes()
+	AddWorkerAndClient(workerInfo *worker.Worker, client *http.Client)
+	SelectWorker(t task.Task) (uuid.UUID, error)
+	GetNodes() []node.Node
+
+	SendWork() (targetEvent *task.TaskEvent, retErr error)
+
+	AddTaskEvent(te task.TaskEvent)
+	GetTask(taskId uuid.UUID) (task *task.Task, err error)
+	GetTasks() (task []*task.Task, err error)
+
+	UpdateTasksForever()
+	SendTasksForever()
+}
+
+const (
+	AuthenticationHeaderKey = "Netbula-Token"
+)
+
+func (a *Api) InitRouter(allowVerbose bool) {
 	a.Router = chi.NewRouter()
-	a.Router.Use(middleware.Logger)
+	if allowVerbose {
+		a.Router.Use(middleware.Logger)
+	}
 	a.Router.Use(a.Authenticate)
 
 	a.Router.Route("/tasks", func(r chi.Router) {
@@ -49,7 +74,7 @@ func (a *Api) initRouter() {
 
 func (a *Api) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("X-Netbula-Token")
+		token := r.Header.Get(AuthenticationHeaderKey)
 		if token != a.TlsToken {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -59,7 +84,7 @@ func (a *Api) Authenticate(next http.Handler) http.Handler {
 }
 
 func (a *Api) Start(certs tls.Certificate) {
-	a.initRouter()
+	a.InitRouter(true)
 	tlsConfig := security.GetManagerTlsConfig(certs)
 	server := &http.Server{
 		Addr:      fmt.Sprintf("0.0.0.0:%d", a.Port),
@@ -104,7 +129,7 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 
 // GET localhost:<Port>/tasks
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	tasks, err := a.Manager.State.GetTasks()
+	tasks, err := a.Manager.GetTasks()
 
 	if err != nil {
 		resErr := fmt.Errorf("failed to get tasks from TaskDb: %w", err)
@@ -140,7 +165,10 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 		return
 	}
 
-	taskToStop, err := a.Manager.State.GetTask(parsedId)
+	taskToStop, err := a.Manager.GetTask(parsedId)
+	if taskToStop == nil {
+		err = errors.New("no target task in TaskDb")
+	}
 	if err != nil {
 		resErr = fmt.Errorf("failed to get task with ID [%s] from TaskDb: %w", parsedId.String(), err)
 		routers.RespondError(responseWriter, http.StatusNotFound, resErr.Error())
@@ -150,7 +178,7 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 	// Pass by value
 	taskCopy := *taskToStop
 	// TODO: Figure out the use of `stopTaskEvent.Task.State`
-	taskCopy.State = task.Running
+	// taskCopy.State = task.Running
 
 	stopTaskEvent := task.TaskEvent{
 		ID:          uuid.New(),

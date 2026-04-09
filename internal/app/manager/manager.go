@@ -342,3 +342,11 @@ func (m *Manager) SendTasksForever() {
 func (m *Manager) GetNodes() []node.Node {
 	return m.WorkerCluster.GetNodes()
 }
+
+func (m *Manager) GetTasks() ([]*task.Task, error) {
+	return m.State.GetTasks()
+}
+
+func (m *Manager) GetTask(taskId uuid.UUID) (*task.Task, error) {
+	return m.State.GetTask(taskId)
+}
