@@ -4,4 +4,5 @@ bin/
 TODO.md
 
 # Coverage report output 
-c.out 
+c.out
+c_cleaned.out
