@@ -1,6 +1,8 @@
 # Define the variables needed for the initialization step 
 BIN_DIR := $(CURDIR)/bin
 MOCKERY_BIN_PATH := $(BIN_DIR)/mockery
+ORIGINAL_PROFILE := c.out
+CLEANED_PROFILE := c_cleaned.out
 
 .DEFAULT_GOAL := build
 # Defines which target is run when no target is specified (i.e. When running `make` alone)
@@ -25,20 +27,23 @@ vet: fmt
 	go vet ./...
 
 test: vet
-	go test -v -cover -coverprofile=c.out ./...
+	go test -v -cover -coverprofile=$(ORIGINAL_PROFILE) ./...
+# First remove the lines containing internal/mocks package
+	grep -v "internal/mocks" $(ORIGINAL_PROFILE) > $(CLEANED_PROFILE)
 
 race : vet
-	go test -v -race -cover -coverprofile=c.out ./...
+	go test -v -race -cover -coverprofile=$(ORIGINAL_PROFILE) ./...
+	grep -v "internal/mocks" $(ORIGINAL_PROFILE) > $(CLEANED_PROFILE)
 
 build: test 
 	go build -o bin/netbula main.go
 
 report: test 
-	go tool cover -html=c.out
+	go tool cover -html=$(CLEANED_PROFILE)
 
-total: test 
-	go tool cover -func=c.out
+total: test
+	go tool cover -func=$(CLEANED_PROFILE)
 
 clean:  
 	rm -rf $(BIN_DIR)
-	rm -rf mocks
+	rm -rf internal/mocks
