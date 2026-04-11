@@ -297,6 +297,7 @@ func deleteTask(workerHttpClient *http.Client, taskId uuid.UUID, workerId uuid.U
 	if err != nil {
 		return fmt.Errorf("failed to send request to worker [%s] at %s: %w", workerId.String(), url, err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("bad status code (%d)", resp.StatusCode)
