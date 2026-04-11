@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,8 +56,14 @@ var (
 func assertResponseRecorderBodyContent[T any](t *testing.T, responseRecorder *httptest.ResponseRecorder, expectedValue T) {
 	t.Helper()
 
+	assertReaderContent(t, responseRecorder.Body, expectedValue)
+}
+
+func assertReaderContent[T any](t *testing.T, reader io.Reader, expectedValue T) {
+	t.Helper()
+
 	var receivedValue T
-	err := json.NewDecoder(responseRecorder.Body).Decode(&receivedValue)
+	err := json.NewDecoder(reader).Decode(&receivedValue)
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedValue, receivedValue)
