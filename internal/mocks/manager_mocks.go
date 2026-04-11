@@ -5,6 +5,7 @@
 package mocks
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/e-hua/netbula/internal/app/manager"
@@ -354,8 +355,8 @@ func (_c *MockManagerService_SelectWorker_Call) RunAndReturn(run func(t task.Tas
 }
 
 // SendTasksForever provides a mock function for the type MockManagerService
-func (_mock *MockManagerService) SendTasksForever() {
-	_mock.Called()
+func (_mock *MockManagerService) SendTasksForever(ctx context.Context) {
+	_mock.Called(ctx)
 	return
 }
 
@@ -365,13 +366,20 @@ type MockManagerService_SendTasksForever_Call struct {
 }
 
 // SendTasksForever is a helper method to define mock.On call
-func (_e *MockManagerService_Expecter) SendTasksForever() *MockManagerService_SendTasksForever_Call {
-	return &MockManagerService_SendTasksForever_Call{Call: _e.mock.On("SendTasksForever")}
+//   - ctx context.Context
+func (_e *MockManagerService_Expecter) SendTasksForever(ctx interface{}) *MockManagerService_SendTasksForever_Call {
+	return &MockManagerService_SendTasksForever_Call{Call: _e.mock.On("SendTasksForever", ctx)}
 }
 
-func (_c *MockManagerService_SendTasksForever_Call) Run(run func()) *MockManagerService_SendTasksForever_Call {
+func (_c *MockManagerService_SendTasksForever_Call) Run(run func(ctx context.Context)) *MockManagerService_SendTasksForever_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -381,7 +389,7 @@ func (_c *MockManagerService_SendTasksForever_Call) Return() *MockManagerService
 	return _c
 }
 
-func (_c *MockManagerService_SendTasksForever_Call) RunAndReturn(run func()) *MockManagerService_SendTasksForever_Call {
+func (_c *MockManagerService_SendTasksForever_Call) RunAndReturn(run func(ctx context.Context)) *MockManagerService_SendTasksForever_Call {
 	_c.Run(run)
 	return _c
 }
@@ -442,8 +450,8 @@ func (_c *MockManagerService_SendWork_Call) RunAndReturn(run func() (*task.TaskE
 }
 
 // UpdateTasksForever provides a mock function for the type MockManagerService
-func (_mock *MockManagerService) UpdateTasksForever() {
-	_mock.Called()
+func (_mock *MockManagerService) UpdateTasksForever(ctx context.Context) {
+	_mock.Called(ctx)
 	return
 }
 
@@ -453,13 +461,20 @@ type MockManagerService_UpdateTasksForever_Call struct {
 }
 
 // UpdateTasksForever is a helper method to define mock.On call
-func (_e *MockManagerService_Expecter) UpdateTasksForever() *MockManagerService_UpdateTasksForever_Call {
-	return &MockManagerService_UpdateTasksForever_Call{Call: _e.mock.On("UpdateTasksForever")}
+//   - ctx context.Context
+func (_e *MockManagerService_Expecter) UpdateTasksForever(ctx interface{}) *MockManagerService_UpdateTasksForever_Call {
+	return &MockManagerService_UpdateTasksForever_Call{Call: _e.mock.On("UpdateTasksForever", ctx)}
 }
 
-func (_c *MockManagerService_UpdateTasksForever_Call) Run(run func()) *MockManagerService_UpdateTasksForever_Call {
+func (_c *MockManagerService_UpdateTasksForever_Call) Run(run func(ctx context.Context)) *MockManagerService_UpdateTasksForever_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -469,7 +484,7 @@ func (_c *MockManagerService_UpdateTasksForever_Call) Return() *MockManagerServi
 	return _c
 }
 
-func (_c *MockManagerService_UpdateTasksForever_Call) RunAndReturn(run func()) *MockManagerService_UpdateTasksForever_Call {
+func (_c *MockManagerService_UpdateTasksForever_Call) RunAndReturn(run func(ctx context.Context)) *MockManagerService_UpdateTasksForever_Call {
 	_c.Run(run)
 	return _c
 }
