@@ -1,18 +1,16 @@
 package manager
 
 import (
-	"crypto/tls"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/logger"
-	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/e-hua/netbula/lib/routers"
@@ -23,7 +21,6 @@ import (
 
 // The Api receiving requests from localhost:<Port>
 type Api struct {
-	Port     int
 	Manager  ManagerService
 	Router   *chi.Mux
 	TlsToken string
@@ -44,8 +41,8 @@ type ManagerService interface {
 	GetTask(taskId uuid.UUID) (task *task.Task, err error)
 	GetTasks() (task []*task.Task, err error)
 
-	UpdateTasksForever()
-	SendTasksForever()
+	UpdateTasksForever(ctx context.Context)
+	SendTasksForever(ctx context.Context)
 }
 
 const (
@@ -83,25 +80,19 @@ func (a *Api) Authenticate(next http.Handler) http.Handler {
 	})
 }
 
-func (a *Api) Start(certs tls.Certificate) {
+func (a *Api) Start(ctx context.Context, tlsListener net.Listener) {
 	a.InitRouter(true)
-	tlsConfig := security.GetManagerTlsConfig(certs)
+
 	server := &http.Server{
-		Addr:      fmt.Sprintf("0.0.0.0:%d", a.Port),
-		Handler:   a.Router,
-		TLSConfig: tlsConfig,
+		Handler: a.Router,
 	}
 
-	// Printing to stdout for normal users to see
-	log.Printf("Manager API (Secure) listening on %d\n", a.Port)
+	go func() {
+		<-ctx.Done()
+		server.Shutdown(context.Background())
+	}()
 
-	// Log the critical info to the stderr
-	a.Logger.Info("Manager API started", slog.Int("port_number", a.Port))
-
-	err := server.ListenAndServeTLS("", "")
-	if err != nil {
-		a.Logger.Error("Failed to start server for control program to connect to", "error", err)
-	}
+	server.Serve(tlsListener)
 }
 
 // POST localhost:<Port>/tasks

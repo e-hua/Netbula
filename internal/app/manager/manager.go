@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -311,25 +312,34 @@ func (m *Manager) stopTask(taskIdToStop uuid.UUID) error {
 }
 
 // Runs an infinite loop to sync the state of the manager with the workers
-func (m *Manager) UpdateTasksForever() {
+func (m *Manager) UpdateTasksForever(ctx context.Context) {
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		m.updateTasks()
 		time.Sleep(UpdateTasksPeriod)
 	}
 }
 
 // Runs an infinite loop to send existing tasks to the workers
-func (m *Manager) SendTasksForever() {
+func (m *Manager) SendTasksForever(ctx context.Context) {
 	for {
-		if m.Pending.Len() == 0 {
+		numOfTasksToSend := m.Pending.Len()
+
+		if numOfTasksToSend == 0 {
+			if ctx.Err() != nil {
+				return
+			}
 			m.ManagerLogger.Debug("No tasks to send, sleeping for 10 seconds")
 			time.Sleep(SendTasksPeriod)
 			continue
 		}
 
-		numOfTasksToSend := m.Pending.Len()
-
 		for range numOfTasksToSend {
+			if ctx.Err() != nil {
+				return
+			}
 			targetEvent, err := m.SendWork()
 			if err != nil {
 				// Logging: Failed to send the taskEvent to worker
