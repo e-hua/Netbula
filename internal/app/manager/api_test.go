@@ -208,7 +208,7 @@ func TestApi_StartTaskHandler(t *testing.T) {
 	testSentTaskEvent := task.TaskEvent{
 		ID:          uuid.New(),
 		TargetState: task.Running,
-		Timestamp:   time.Unix(0, 0),
+		Timestamp:   time.Unix(0, 0).UTC(),
 		Task:        testSentTask,
 	}
 
