@@ -1,16 +1,16 @@
 package manager
 
 import (
-	"crypto/tls"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
-	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
+	"github.com/e-hua/netbula/internal/app/worker"
 	"github.com/e-hua/netbula/internal/logger"
-	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
 	"github.com/e-hua/netbula/lib/routers"
@@ -21,17 +21,39 @@ import (
 
 // The Api receiving requests from localhost:<Port>
 type Api struct {
-	Port     int
-	Manager  *Manager
+	Manager  ManagerService
 	Router   *chi.Mux
 	TlsToken string
 
 	Logger logger.ManagerLogger
 }
 
-func (a *Api) initRouter() {
+type ManagerService interface {
+	// Managing workers
+	UpdateWorkerNodes()
+	AddWorkerAndClient(workerInfo *worker.Worker, client *http.Client)
+	SelectWorker(t task.Task) (uuid.UUID, error)
+	GetNodes() []node.Node
+
+	SendWork() (targetEvent *task.TaskEvent, retErr error)
+
+	AddTaskEvent(te task.TaskEvent)
+	GetTask(taskId uuid.UUID) (task *task.Task, err error)
+	GetTasks() (task []*task.Task, err error)
+
+	UpdateTasksForever(ctx context.Context)
+	SendTasksForever(ctx context.Context)
+}
+
+const (
+	AuthenticationHeaderKey = "Netbula-Token"
+)
+
+func (a *Api) InitRouter(allowVerbose bool) {
 	a.Router = chi.NewRouter()
-	a.Router.Use(middleware.Logger)
+	if allowVerbose {
+		a.Router.Use(middleware.Logger)
+	}
 	a.Router.Use(a.Authenticate)
 
 	a.Router.Route("/tasks", func(r chi.Router) {
@@ -49,7 +71,7 @@ func (a *Api) initRouter() {
 
 func (a *Api) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("X-Netbula-Token")
+		token := r.Header.Get(AuthenticationHeaderKey)
 		if token != a.TlsToken {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -58,25 +80,19 @@ func (a *Api) Authenticate(next http.Handler) http.Handler {
 	})
 }
 
-func (a *Api) Start(certs tls.Certificate) {
-	a.initRouter()
-	tlsConfig := security.GetManagerTlsConfig(certs)
+func (a *Api) Start(ctx context.Context, tlsListener net.Listener) {
+	a.InitRouter(true)
+
 	server := &http.Server{
-		Addr:      fmt.Sprintf("0.0.0.0:%d", a.Port),
-		Handler:   a.Router,
-		TLSConfig: tlsConfig,
+		Handler: a.Router,
 	}
 
-	// Printing to stdout for normal users to see
-	log.Printf("Manager API (Secure) listening on %d\n", a.Port)
+	go func() {
+		<-ctx.Done()
+		server.Shutdown(context.Background())
+	}()
 
-	// Log the critical info to the stderr
-	a.Logger.Info("Manager API started", slog.Int("port_number", a.Port))
-
-	err := server.ListenAndServeTLS("", "")
-	if err != nil {
-		a.Logger.Error("Failed to start server for control program to connect to", "error", err)
-	}
+	server.Serve(tlsListener)
 }
 
 // POST localhost:<Port>/tasks
@@ -104,7 +120,8 @@ func (a *Api) StartTaskHandler(responseWriter http.ResponseWriter, request *http
 
 // GET localhost:<Port>/tasks
 func (a *Api) GetTasksHandler(responseWriter http.ResponseWriter, request *http.Request) {
-	tasks, err := a.Manager.State.TaskDb.List()
+	tasks, err := a.Manager.GetTasks()
+
 	if err != nil {
 		resErr := fmt.Errorf("failed to get tasks from TaskDb: %w", err)
 		routers.RespondError(responseWriter, http.StatusInternalServerError, resErr.Error())
@@ -139,7 +156,10 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 		return
 	}
 
-	taskToStop, err := a.Manager.State.TaskDb.Get(parsedId.String())
+	taskToStop, err := a.Manager.GetTask(parsedId)
+	if taskToStop == nil {
+		err = errors.New("no target task in TaskDb")
+	}
 	if err != nil {
 		resErr = fmt.Errorf("failed to get task with ID [%s] from TaskDb: %w", parsedId.String(), err)
 		routers.RespondError(responseWriter, http.StatusNotFound, resErr.Error())
@@ -148,7 +168,8 @@ func (a *Api) StopTaskHandler(responseWriter http.ResponseWriter, request *http.
 
 	// Pass by value
 	taskCopy := *taskToStop
-	taskCopy.State = task.Completed
+	// TODO: Figure out the use of `stopTaskEvent.Task.State`
+	// taskCopy.State = task.Running
 
 	stopTaskEvent := task.TaskEvent{
 		ID:          uuid.New(),

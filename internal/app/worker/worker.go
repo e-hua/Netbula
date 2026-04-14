@@ -159,10 +159,25 @@ func (w *Worker) StopTask(taskToStop task.Task) docker.DockerResult {
 	return result
 }
 
+// Simply adding a task to be executed
+// Task is not being runned at this point, hence should not be in the storage
 func (w *Worker) AddTask(taskToAdd task.Task) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	w.Queue.Enqueue(taskToAdd)
+}
+
+// Store the state of the task after running it
+func (w *Worker) StoreTask(taskToStore task.Task) error {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	err := w.taskDb.Put(taskToStore.ID.String(), &taskToStore)
+	if err != nil {
+		return fmt.Errorf("failed to put task %#v into taskDb: %w", taskToStore, err)
+	}
+
+	return nil
 }
 
 func (w *Worker) GetTasks() ([]*task.Task, error) {

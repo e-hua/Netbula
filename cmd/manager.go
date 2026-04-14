@@ -4,8 +4,23 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+
 	"github.com/e-hua/netbula/internal/app/manager"
+	"github.com/e-hua/netbula/internal/logger"
+	"github.com/e-hua/netbula/internal/scheduler"
 	"github.com/spf13/cobra"
+)
+
+const (
+	ManagerConfigDirPath  = "."
+	ManagerConfigFileName = "manager_config.json"
+
+	ManagerDbPath                 = "manager.db"
+	ManagerDbFileMode os.FileMode = 0600
 )
 
 // managerCmd represents the manager command
@@ -23,13 +38,67 @@ var managerCmd = &cobra.Command{
 		apiPort, _ := cmd.Flags().GetInt("api-port")
 		verbose, _ := cmd.Flags().GetBool("verbose")
 
-		manager.Run([2]int{workerPort, apiPort}, verbose)
+		// Load configurations
+		cfg, err := manager.SetupConfig(
+			ManagerConfigDirPath,
+			ManagerConfigFileName,
+			workerPort,
+			apiPort,
+		)
+		if err != nil {
+			logger.TerminateApplication(
+				"Failed to setup configurations for the manager application",
+				err,
+			)
+		}
+
+		// Open sockets for listening
+		workerListener, err := manager.CreateTcpListener(cfg.WorkerConnectionPort)
+		if err != nil {
+			logger.TerminateApplication(
+				"Failed to open socket for workers to connect to",
+				err,
+			)
+		}
+		ctlListener, err := manager.CreateTcpListener(cfg.ServerApiPort)
+		if err != nil {
+			logger.TerminateApplication(
+				"Failed to open socket for the control application to connect to",
+				err,
+			)
+		}
+
+		// Building the application
+		appConfigs := manager.AppConfigs{
+			LogDest:                  os.Stderr,
+			Scheduler:                &scheduler.Epvm{},
+			AllowVerbose:             verbose,
+			IsPersistent:             true,
+			ManagerDbPath:            ManagerDbPath,
+			ManagerDbFileMode:        ManagerDbFileMode,
+			ManagerConfigs:           *cfg,
+			WorkerConnectionListener: workerListener,
+			ManagerServerApiListener: ctlListener,
+		}
+		app, err := manager.NewApp(appConfigs)
+		if err != nil {
+			logger.TerminateApplication(
+				"Failed to create application",
+				err,
+			)
+		}
+
+		// Printing to stdout for normal users to see
+		log.Printf("Manager API (Secure) for control program to connect to listening on %d\n", cfg.ServerApiPort)
+		log.Printf("Manager API (Secure) for workers to connect to listening on %d\n", cfg.ServerApiPort)
+		fmt.Printf("Connection token: %v (Enter this when registering workers or control)\n", cfg.TlsToken)
+
+		app.Run(context.Background())
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(managerCmd)
-	// TODO: Verbose mode
 	managerCmd.Flags().BoolP(
 		"verbose",
 		"v",

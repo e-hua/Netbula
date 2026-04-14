@@ -2,9 +2,35 @@
 
 ## Yet another container orchestrator
 
-## Where to start
+## Developer Guide
 
-- Build: `go build -o bin/netbula main.go`
+### Use `Makefile` for local development
+
+- Build: Run command `make` in the root directory of the project
+
+- Check overall test coverage rate of the entire project: `make total`
+
+- Check the coverage report in HTML view: `make report`
+
+- Remove all the binaries and mock types generated: `make clean`
+
+### Use `act` to test GitHub workflow (on Apple Silicon Macs)
+
+#### 1. Install `act` using homebrew
+
+```bash
+brew install act
+```
+
+#### 2. Run `act` to test workflow locally
+
+```bash
+act --container-architecture linux/arm64 --secret-file .secrets
+```
+
+## User Guide
+
+### Initialize the manager and worker
 
 - Run the manager program for the first time:
   `bin/netbula manager \ 
@@ -17,38 +43,38 @@
 --token <tls_token> \
 --name <worker_name>`
 
-## How to use the control program to get info from your manager instance
+### How to use the control program to get info from your manager instance
 
-### Initialize the ctl program:
+#### Initialize the ctl program:
 
 `bin/netbula control \
 --manager-address <manager_ip_address>:<port_number_for_manager_api> \
 --token <tls_token>`
 
-### Start a task
+#### Start a task
 
 `bin/netbula control run \
 --filename <fileName>(Example: demo/startTask.json)`
 
-### Delete a task
+#### Delete a task
 
 `bin/netbula control stop <taskUuid>(Example: 21b23589-5d2d-4731-b5c9-a97e9832d021)`
 
-### Get all tasks
+#### Get all tasks
 
-`bin/netbula tasks`
+`bin/netbula control tasks`
 
-### Get all nodes
+#### Get all nodes
 
-`bin/netbula nodes`
+`bin/netbula control nodes`
 
-## Using Systemd to keep the manager / worker alive
+### Using Systemd to keep the manager / worker alive
 
-### 1. Setup config file
+#### 1. Setup config file
 
 `sudo vim /etc/systemd/system/netbula.service`
 
-### 2. Paste the Configuration
+#### 2. Paste the Configuration
 
 ```
 [Unit]
@@ -78,18 +104,18 @@ StandardError=append:/home/<userName>/Netbula/manager.log
 WantedBy=multi-user.target
 ```
 
-### 3. Start the service with Systemd
+#### 3. Start the service with Systemd
 
 `sudo systemctl start netbula`
 
-### 4. Enable it to start on boot
+#### 4. Enable it to start on boot
 
 `sudo systemctl enable netbula`
 
-### 5. Check the status
+#### 5. Check the status
 
 `sudo systemctl status netbula`
 
-### 6. Watch the logs
+#### 6. Watch the logs
 
 `tail -f /home/cgh/Netbula/manager.log`

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -19,21 +21,105 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
-const (
-	ManagerConfigDirPath  = "."
-	ManagerConfigFileName = "manager_config.json"
-)
+type AppConfigs struct {
+	LogDest   io.Writer
+	Scheduler scheduler.Scheduler
 
-func createTlsListener(cert tls.Certificate, token string, port string) (net.Listener, error) {
-	tlsConfig := security.GetManagerTlsConfig(cert)
+	AllowVerbose bool
+	// Set this to true if wants persistent storage
+	IsPersistent bool
+	// Only need these if `IsPersistent` is true
+	ManagerDbPath     string
+	ManagerDbFileMode os.FileMode
 
-	listener, err := tls.Listen("tcp", port, tlsConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to listen on port %s: %w", port, err)
+	ManagerConfigs configs.ManagerConfig
+
+	WorkerConnectionListener net.Listener
+	ManagerServerApiListener net.Listener
+}
+
+type App struct {
+	Manager ManagerService
+	Api     Api
+	Logger  logger.ManagerLogger
+
+	WorkerConnectionTlsListener  net.Listener
+	ControlConnectionTlsListener net.Listener
+
+	ManagerConfigs configs.ManagerConfig
+}
+
+func NewApp(configs AppConfigs) (*App, error) {
+	// Create TLS listeners
+	cert := tls.Certificate{
+		Certificate: configs.ManagerConfigs.TlsCertificateInBytes,
+		PrivateKey:  ed25519.PrivateKey(configs.ManagerConfigs.TlsPrivateKey),
 	}
 
-	fmt.Printf("Connection token: %v (Enter this when registering workers)\n", token)
-	return listener, nil
+	workerConnectionTlsListener := CreateTlsListener(cert, configs.WorkerConnectionListener)
+	controlConnectionTlsListener := CreateTlsListener(cert, configs.ManagerServerApiListener)
+
+	// Initialize the Manager + API
+	managerLogger := logger.NewManagerLogger(configs.AllowVerbose, configs.LogDest)
+
+	var stateStores *stateStores
+	var err error
+
+	if configs.IsPersistent {
+		stateStores, err = CreatePersistentStateStores(configs.ManagerDbPath, configs.ManagerDbFileMode)
+	} else {
+		stateStores = CreateInMemoryStores()
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create DBs providing persistent storage for manager: %w", err)
+	}
+
+	newManager, err := New(configs.Scheduler, *managerLogger, stateStores)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize manager: %w", err)
+	}
+
+	managerApi := Api{
+		Manager:  newManager,
+		TlsToken: configs.ManagerConfigs.TlsToken,
+		Logger:   *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
+	}
+
+	return &App{
+		Manager: newManager,
+		Api:     managerApi,
+		Logger:  *managerLogger,
+
+		WorkerConnectionTlsListener:  workerConnectionTlsListener,
+		ControlConnectionTlsListener: controlConnectionTlsListener,
+
+		ManagerConfigs: configs.ManagerConfigs,
+	}, nil
+}
+
+func CreateTcpListener(port int) (net.Listener, error) {
+	tcpListener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on port %d: %w", port, err)
+	}
+
+	return tcpListener, nil
+}
+
+func CreateTlsListener(cert tls.Certificate, listener net.Listener) net.Listener {
+	tlsConfig := security.GetManagerTlsConfig(cert)
+
+	return tls.NewListener(listener, tlsConfig)
+}
+
+func (a *App) Run(ctx context.Context) {
+	go a.Manager.SendTasksForever(ctx)
+	go a.Manager.UpdateTasksForever(ctx)
+	go a.Api.Start(ctx, a.ControlConnectionTlsListener)
+
+	waitForWorkersForever(ctx, a.WorkerConnectionTlsListener, a.Manager, a.Logger)
 }
 
 // Blocks until the client connects
@@ -45,8 +131,7 @@ func connectAndCreateHttpClient(listener net.Listener) (*http.Client, error) {
 
 	session, err := yamux.Client(conn, nil)
 	if err != nil {
-		conn.Close()
-		return nil, err
+		return nil, errors.Join(err, conn.Close())
 	}
 
 	httpConnection := &http.Client{
@@ -60,21 +145,23 @@ func connectAndCreateHttpClient(listener net.Listener) (*http.Client, error) {
 }
 
 // Returns the config read from disk / generated
-func setupConfig(ports [2]int, logger logger.ManagerLogger) (*configs.ManagerConfig, error) {
-	config, err := configs.GetConfigFromFile[configs.ManagerConfig](ManagerConfigDirPath, ManagerConfigFileName)
+func SetupConfig(
+	configDirPath, configFileName string,
+	newWorkerConnectionPort, newManagerServerApiPort int,
+) (*configs.ManagerConfig, error) {
+
+	// Loading the existing configs
+	config, err := configs.GetConfigFromFile[configs.ManagerConfig](configDirPath, configFileName)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			logger.Info("The config file does not exist yet, creating a new configuration with ports provided", "error", err)
+			slog.Info("The config file does not exist yet, creating a new configuration with ports provided", "error", err)
 		} else {
-			logger.Warn("The config file is corrupted or cannot be read, creating a new configuration with ports provided", "error", err)
+			slog.Warn("The config file is corrupted or cannot be read, creating a new configuration with ports provided", "error", err)
 		}
 	}
 
-	newWorkerConnectionPort := ports[0]
-	newManagerServerApiPort := ports[1]
-
-	// We don't have previous configurations
 	if err != nil {
+		// We don't have previous configurations
 		cert, token := security.GenerateManagerIdentity()
 		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token)
 	} else {
@@ -87,7 +174,7 @@ func setupConfig(ports [2]int, logger logger.ManagerLogger) (*configs.ManagerCon
 		}
 	}
 
-	err = configs.StoreConfigToFile(ManagerConfigDirPath, ManagerConfigFileName, config)
+	err = configs.StoreConfigToFile(configDirPath, configFileName, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store the manager configs to file: %w", err)
 	}
@@ -95,66 +182,46 @@ func setupConfig(ports [2]int, logger logger.ManagerLogger) (*configs.ManagerCon
 	return config, nil
 }
 
-func waitForWorkersForever(listener net.Listener, newManager *Manager) {
+func waitForWorkersForever(ctx context.Context, listener net.Listener, newManager ManagerService, logger logger.ManagerLogger) {
+	go func() {
+		// Blocks until the context is sending cancel signal
+		<-ctx.Done()
+		// Causing all the following connections to fail
+		listener.Close()
+	}()
+
 	for {
 		httpClient, err := connectAndCreateHttpClient(listener)
 		if err != nil {
-			newManager.ManagerLogger.Error("Failed to connect to worker and create an HTTP client", "error", err)
+			// Returning if the context is closed
+			if ctx.Err() != nil {
+				return
+			}
+			logger.Error("Failed to connect to worker and create an HTTP client", "error", err)
 			continue
 		}
 
-		resp, err := httpClient.Get("http://worker/info")
+		// Making requests
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://worker/info", nil)
+		resp, err := httpClient.Do(req)
 		if err != nil {
-			newManager.ManagerLogger.Error("Failed to get worker info", "error", err)
+			if ctx.Err() != nil {
+				return
+			}
+			logger.Error("Failed to get worker info", "error", err)
 			continue
 		}
 
 		workerInfo := &worker.Worker{}
-		json.NewDecoder(resp.Body).Decode(workerInfo)
+		err = json.NewDecoder(resp.Body).Decode(workerInfo)
+		resp.Body.Close()
+		if err != nil {
+			logger.Error("Failed to decode worker info", "error", err)
+			continue
+		}
 
 		newManager.AddWorkerAndClient(workerInfo, httpClient)
 
 		newManager.UpdateWorkerNodes()
 	}
-}
-
-func Run(ports [2]int, verbose bool) {
-	managerLogger := logger.NewManagerLogger(verbose)
-
-	cfg, err := setupConfig(ports, *managerLogger)
-	if err != nil {
-		// Shutting down
-		managerLogger.TerminateApplication("Failed to setup configurations of manager", err)
-	}
-
-	formattedPort := fmt.Sprintf(":%d", cfg.WorkerConnectionPort)
-	cert := tls.Certificate{
-		Certificate: cfg.TlsCertificateInBytes,
-		PrivateKey:  ed25519.PrivateKey(cfg.TlsPrivateKey),
-	}
-
-	listener, err := createTlsListener(cert, cfg.TlsToken, formattedPort)
-	if err != nil {
-		// Shutting down
-		managerLogger.TerminateApplication("Failed to initialize TCP listener with TLS encryption", err)
-	}
-
-	newManager, err := New(&scheduler.Epvm{}, "persistent", *managerLogger)
-	if err != nil {
-		// Shutting down
-		managerLogger.TerminateApplication("Failed to initialize manager", err)
-	}
-
-	managerApi := Api{
-		Manager:  newManager,
-		Port:     cfg.ServerApiPort,
-		TlsToken: cfg.TlsToken,
-		Logger:   *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
-	}
-
-	go newManager.SendTasksForever()
-	go newManager.UpdateTasksForever()
-	go managerApi.Start(cert)
-
-	waitForWorkersForever(listener, newManager)
 }

@@ -29,6 +29,26 @@ type Node struct {
 	WorkerUuid uuid.UUID
 }
 
+func StatsToNode(workerUuid uuid.UUID, workerName string, workerTaskCount int, stats types.Stats) Node {
+	return Node{
+		Name: workerName,
+
+		Cores:             stats.CpuCount,
+		CpuAveragePercent: stats.CpuPercents[0],
+		CpuAverageLoad:    stats.LoadAvg,
+
+		Memory:                 int(stats.MemTotalInBytes),
+		MemoryAllocatedPercent: stats.MemUsedPercent,
+
+		Disk:                 int(stats.DiskTotalInBytes),
+		DiskAllocatedPercent: stats.DiskUsedPercent,
+
+		WorkerUuid: workerUuid,
+
+		TaskCount: workerTaskCount,
+	}
+}
+
 func (n Node) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("worker_uuid", n.WorkerUuid.String()),

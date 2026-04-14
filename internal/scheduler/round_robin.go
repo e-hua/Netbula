@@ -11,11 +11,11 @@ type RoundRobin struct {
 	LastWorkerIdx int
 }
 
-func (r *RoundRobin) SelectCandidateNodes(t task.Task, nodes []*node.Node) []*node.Node {
+func (r *RoundRobin) SelectCandidateNodes(t task.Task, nodes []node.Node) []node.Node {
 	return nodes
 }
 
-func (r *RoundRobin) Score(t task.Task, nodes []*node.Node) map[uuid.UUID]float64 {
+func (r *RoundRobin) Score(t task.Task, nodes []node.Node) map[uuid.UUID]float64 {
 	nodeScores := make(map[uuid.UUID]float64)
 
 	newWorkerIdx := (r.LastWorkerIdx + 1) % len(nodes)
@@ -33,16 +33,16 @@ func (r *RoundRobin) Score(t task.Task, nodes []*node.Node) map[uuid.UUID]float6
 }
 
 // Pick the node with lowest score
-func (r *RoundRobin) Pick(scores map[uuid.UUID]float64, candidates []*node.Node) *node.Node {
+func (r *RoundRobin) Pick(scores map[uuid.UUID]float64, candidates []node.Node) *node.Node {
 	var bestNode *node.Node
 	var lowestScore float64
 
 	for idx, node := range candidates {
 		if idx == 0 {
-			bestNode = node
+			bestNode = &node
 			lowestScore = scores[node.WorkerUuid]
 		} else if scores[node.WorkerUuid] < lowestScore {
-			bestNode = node
+			bestNode = &node
 			lowestScore = scores[node.WorkerUuid]
 		}
 	}

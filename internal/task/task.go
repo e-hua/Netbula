@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -25,6 +26,43 @@ const (
 	// If task fails
 	Failed
 )
+
+func (s *State) UnmarshalJSON(bytes []byte) error {
+	var str string
+	err := json.Unmarshal(bytes, &str)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal bytes: %w", err)
+	}
+
+	decodedState, err := StringToState(str)
+	if err != nil {
+		return fmt.Errorf("failed to turn string into `State`: %w", err)
+	}
+
+	*s = decodedState
+	return nil
+}
+
+func (s State) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+func StringToState(str string) (State, error) {
+	switch str {
+	case "PENDING":
+		return Pending, nil
+	case "SCHEDULED":
+		return Scheduled, nil
+	case "RUNNING":
+		return Running, nil
+	case "COMPLETED":
+		return Completed, nil
+	case "FAILED":
+		return Failed, nil
+	default:
+		return Pending, fmt.Errorf("unknown state: `%s`", str)
+	}
+}
 
 func (s State) String() string {
 	switch s {
@@ -68,23 +106,23 @@ func ValidStateTransition(src State, dest State) bool {
 
 // Acts as an abstraction for a container
 type Task struct {
-	ID uuid.UUID
+	ID uuid.UUID `json:"task_id"`
 
-	Name   string
-	State  State
-	Image  string
-	Cpu    float64
-	Memory int
-	Disk   int
+	Name   string  `json:"name"`
+	State  State   `json:"state"`
+	Image  string  `json:"image"`
+	Cpu    float64 `json:"cpu"`
+	Memory int     `json:"memory"`
+	Disk   int     `json:"disk"`
 
-	ExposedPorts  network.PortSet
-	PortBindings  network.PortMap
-	RestartPolicy string
+	ExposedPorts  network.PortSet `json:"exposed_ports"`
+	PortBindings  network.PortMap `json:"port_bindings"`
+	RestartPolicy string          `json:"restart_policy"`
 
-	StartTime  time.Time
-	FinishTime time.Time
+	StartTime  time.Time `json:"start_time"`
+	FinishTime time.Time `json:"finish_time"`
 
-	ContainerID string
+	ContainerID string `json:"container_id"`
 }
 
 func (t Task) LogValue() slog.Value {
@@ -107,10 +145,10 @@ func (t Task) LogValue() slog.Value {
 }
 
 type TaskEvent struct {
-	ID          uuid.UUID
-	TargetState State
-	Timestamp   time.Time
-	Task        Task
+	ID          uuid.UUID `json:"event_id"`
+	TargetState State     `json:"target_state"`
+	Timestamp   time.Time `json:"timestamp"`
+	Task        Task      `json:"task"`
 }
 
 func (te TaskEvent) LogValue() slog.Value {

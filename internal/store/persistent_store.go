@@ -18,11 +18,13 @@ func NewPersistentStore[T any](db *bolt.DB, bucketName string) (*PersistentStore
 		BucketName: bucketName,
 	}
 
-	err := persistentDb.CreateBucket()
+	err := persistentDb.createBucket()
 
 	return persistentDb, err
 }
 
+// Since we're writing key as bytes
+// Key cannot be empty string
 func (p *PersistentStore[T]) Put(key string, value *T) error {
 	// A read operation
 	return p.Db.Update(func(tx *bolt.Tx) error {
@@ -120,15 +122,15 @@ func (p *PersistentStore[T]) Count() (int, error) {
 	keyCount := 0
 
 	// Read the number of key/value pairs in the bucket
-	p.Db.View(func(tx *bolt.Tx) error {
+	err := p.Db.View(func(tx *bolt.Tx) error {
 		keyCount = tx.Bucket([]byte(p.BucketName)).Stats().KeyN
 		return nil
 	})
 
-	return keyCount, nil
+	return keyCount, err
 }
 
-func (p *PersistentStore[T]) CreateBucket() error {
+func (p *PersistentStore[T]) createBucket() error {
 	return p.Db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(p.BucketName))
 		return err
