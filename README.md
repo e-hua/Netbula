@@ -1,6 +1,12 @@
+[![codecov](https://codecov.io/gh/e-hua/Netbula/graph/badge.svg?token=CGUPT6W1GA)](https://codecov.io/gh/e-hua/Netbula)
+
 # Netbula
 
 ## Yet another container orchestrator
+
+### Architecture
+
+- `docs/adr`: ARDs (Architectural Decision Record), tracking all important architectural decision made when developing Netbula.
 
 ## Developer Guide
 
