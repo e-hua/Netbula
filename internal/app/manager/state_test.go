@@ -33,6 +33,14 @@ func insertMockData(testStore *stateStores) {
 	// Assigned to worker-2
 	testTask3Uuid := uuid.New()
 
+	testTask1 := task.Task{ID: testTask1Uuid, State: task.Running}
+	testTask2 := task.Task{ID: testTask2Uuid, State: task.Scheduled}
+	testTask3 := task.Task{ID: testTask3Uuid, State: task.Running}
+
+	testStore.taskDb.Put(testTask1Uuid.String(), &testTask1)
+	testStore.taskDb.Put(testTask2Uuid.String(), &testTask2)
+	testStore.taskDb.Put(testTask3Uuid.String(), &testTask3)
+
 	testStore.taskWorkerDb.Put(testTask1Uuid.String(), &testWorker1Id)
 	testStore.taskWorkerDb.Put(testTask2Uuid.String(), &testWorker1Id)
 	testStore.taskWorkerDb.Put(testTask3Uuid.String(), &testWorker2Id)
