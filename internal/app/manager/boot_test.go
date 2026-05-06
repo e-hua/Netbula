@@ -170,7 +170,13 @@ func TestApp_Run(t *testing.T) {
 
 	mockManager.EXPECT().UpdateWorkerNodes().Return()
 	mockManager.EXPECT().GetNodes().Return(mockNodes)
-	mockManager.EXPECT().AddWorkerAndClient(mock.Anything, mock.Anything).Return()
+
+	// Channel with a buffer of length 1 to signal the function is called
+	called := make(chan struct{}, 1)
+
+	mockManager.EXPECT().AddWorkerAndClient(mock.Anything, mock.Anything).Run(func(_ *worker.Worker, _ *http.Client) {
+		called <- struct{}{}
+	}).Return()
 
 	testApp := &manager.App{
 		Manager: mockManager,
@@ -198,14 +204,14 @@ func TestApp_Run(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assertReaderContent(t, resp.Body, mockNodes)
 
-	assert.Eventually(
-		t,
-		func() bool {
-			return mockManager.AssertCalled(t, "AddWorkerAndClient", mock.Anything, mock.Anything)
-		},
-		time.Second,
-		10*time.Millisecond,
-	)
+	// Wait for one second before calling `cancel()`
+	// Prevent the test function from exiting too early, causing the expectation on `AddWorkerAndClient` to fail
+	select {
+	case <-called:
+	// `AddWorkerAndClient` is called
+	case <-time.After(time.Second):
+		t.Error("AddWorkerAndClient is not called within 1 second")
+	}
 
 	cancel()
 }
