@@ -18,7 +18,7 @@ We're implementing a **Reverse-Tunneling scheme**, that requires only a single "
 
 - Workers-Initiated Connection: On startup, the worker application dials out to the public IP address of the manager using TCP.
 
-- Persistent Control Channel: Once the TCP connection is established, the manager wraps the raw TCP stream with a Yamux client and stores the session in memory. This allows the manager to send multiple HTTP requests (multiplex) to and receive responses from the the connected worker at any time.
+- Persistent Control Channel: Once the TCP connection is established, the manager wraps the raw TCP stream with a Yamux client and stores the session in memory. This allows the manager to send multiple HTTP requests (multiplex) to and receive responses from the connected worker at any time.
 
 ## Consequences
 
