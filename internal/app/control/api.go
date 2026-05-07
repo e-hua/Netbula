@@ -2,30 +2,28 @@ package control
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 
+	"github.com/e-hua/netbula/internal/networks/security"
 	"github.com/e-hua/netbula/internal/node"
 	"github.com/e-hua/netbula/internal/task"
 )
 
-func createCustomHttpsClient() *http.Client {
+func createCustomHttpsClient(certFingerprint string) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true, // Allowing self-signed certs
-			},
+			TLSClientConfig: security.GenerateTlsConfig(certFingerprint),
 		},
 	}
 }
 
 // POST {manager_address}/tasks
 // Make an API request to the manager to start a task
-func StartTask(managerAddress string, token string, taskData []byte) {
+func StartTask(managerAddress string, token string, certFingerprint string, taskData []byte) {
 	log.Printf("Task data sent: %v\n", string(taskData))
 
 	url := fmt.Sprintf("https://%s/tasks", managerAddress)
@@ -34,10 +32,10 @@ func StartTask(managerAddress string, token string, taskData []byte) {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
-	req.Header.Set("X-Netbula-Token", token)
+	req.Header.Set("Netbula-Token", token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := createCustomHttpsClient().Do(req)
+	resp, err := createCustomHttpsClient(certFingerprint).Do(req)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -53,16 +51,16 @@ func StartTask(managerAddress string, token string, taskData []byte) {
 
 // GET {manager_address}/tasks
 // Make an API request to the manager to get all the tasks
-func GetTasks(managerAddress string, token string) []*task.Task {
+func GetTasks(managerAddress string, token string, certFingerprint string) []*task.Task {
 	url := fmt.Sprintf("https://%s/tasks", managerAddress)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
-	req.Header.Set("X-Netbula-Token", token)
+	req.Header.Set("Netbula-Token", token)
 
-	resp, err := createCustomHttpsClient().Do(req)
+	resp, err := createCustomHttpsClient(certFingerprint).Do(req)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -87,16 +85,16 @@ func GetTasks(managerAddress string, token string) []*task.Task {
 
 // DELETE {manager_address}/tasks/{taskId}
 // Make an API request to the manager to stop the task
-func StopTask(managerAddress string, token string, taskId string) {
+func StopTask(managerAddress string, token string, certFingerprint string, taskId string) {
 	url := fmt.Sprintf("https://%s/tasks/%s", managerAddress, taskId)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
-	req.Header.Set("X-Netbula-Token", token)
+	req.Header.Set("Netbula-Token", token)
 
-	resp, err := createCustomHttpsClient().Do(req)
+	resp, err := createCustomHttpsClient(certFingerprint).Do(req)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -112,16 +110,16 @@ func StopTask(managerAddress string, token string, taskId string) {
 
 // GET {manager_address}/nodes
 // Make an API request to the manager to get all the nodes
-func GetNodes(managerAddress string, token string) []*node.Node {
+func GetNodes(managerAddress string, token string, certFingerprint string) []*node.Node {
 	url := fmt.Sprintf("https://%s/nodes", managerAddress)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Panicf("Error creating http request: %v", err)
 	}
 
-	req.Header.Set("X-Netbula-Token", token)
+	req.Header.Set("Netbula-Token", token)
 
-	resp, err := createCustomHttpsClient().Do(req)
+	resp, err := createCustomHttpsClient(certFingerprint).Do(req)
 	if err != nil {
 		log.Panic(err)
 	}

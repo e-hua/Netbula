@@ -84,8 +84,8 @@ func TestNewApp(t *testing.T) {
 	testManagerToWorkerListener := InitTestListener(testManagerToWorkerConn)
 	testManagerToControlListener := InitTestListener(testManagerToControlConn)
 
-	testCert, testToken := security.GenerateManagerIdentity()
-	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken)
+	testCert, testToken, testCertFingerprint := security.GenerateManagerIdentity()
+	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken, testCertFingerprint)
 
 	testAppConfigs := manager.AppConfigs{
 		LogDest:   io.Discard,
@@ -146,11 +146,11 @@ func TestApp_Run(t *testing.T) {
 	testManagerToWorkerListener := InitTestListener(testManagerToWorkerConn)
 	testManagerToControlListener := InitTestListener(testManagerToControlConn)
 
-	testCert, testToken := security.GenerateManagerIdentity()
-	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken)
+	testCert, testToken, testCertFingerprint := security.GenerateManagerIdentity()
+	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken, testCertFingerprint)
 
 	// Start the worker server
-	testWorkerTlsConn := tls.Client(testWorkerToManagerConn, security.GetWorkerTlsConfig(testToken))
+	testWorkerTlsConn := tls.Client(testWorkerToManagerConn, security.GenerateTlsConfig(testCertFingerprint))
 	testWorkerTlsListener, err := yamux.Server(testWorkerTlsConn, nil)
 	assert.NoError(t, err)
 	go func() {
@@ -170,14 +170,20 @@ func TestApp_Run(t *testing.T) {
 
 	mockManager.EXPECT().UpdateWorkerNodes().Return()
 	mockManager.EXPECT().GetNodes().Return(mockNodes)
-	mockManager.EXPECT().AddWorkerAndClient(mock.Anything, mock.Anything).Return()
+
+	// Channel with a buffer of length 1 to signal the function is called
+	called := make(chan struct{}, 1)
+
+	mockManager.EXPECT().AddWorkerAndClient(mock.Anything, mock.Anything).Run(func(_ *worker.Worker, _ *http.Client) {
+		called <- struct{}{}
+	}).Return()
 
 	testApp := &manager.App{
 		Manager: mockManager,
 		Api: manager.Api{
-			Manager:  mockManager,
-			TlsToken: testToken,
-			Logger:   *logger.NewManagerLogger(true, io.Discard),
+			Manager:   mockManager,
+			AuthToken: testToken,
+			Logger:    *logger.NewManagerLogger(true, io.Discard),
 		},
 		Logger:                       *logger.NewManagerLogger(true, io.Discard),
 		WorkerConnectionTlsListener:  manager.CreateTlsListener(testCert, testManagerToWorkerListener),
@@ -198,14 +204,14 @@ func TestApp_Run(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assertReaderContent(t, resp.Body, mockNodes)
 
-	assert.Eventually(
-		t,
-		func() bool {
-			return mockManager.AssertCalled(t, "AddWorkerAndClient", mock.Anything, mock.Anything)
-		},
-		time.Second,
-		10*time.Millisecond,
-	)
+	// Wait for one second before calling `cancel()`
+	// Prevent the test function from exiting too early, causing the expectation on `AddWorkerAndClient` to fail
+	select {
+	case <-called:
+	// `AddWorkerAndClient` is called
+	case <-time.After(time.Second):
+		t.Error("AddWorkerAndClient is not called within 1 second")
+	}
 
 	cancel()
 }

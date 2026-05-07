@@ -280,7 +280,7 @@ func (m *Manager) determineWorker(taskEvent task.TaskEvent) (uuid.UUID, error) {
 	assignedWorker, _ := m.State.GetAssignedWorker(taskEvent.Task.ID)
 
 	// If the task is already running
-	// Select worker we retreived
+	// Select worker we retrieved
 	if assignedWorker != nil {
 		return *assignedWorker, nil
 	}

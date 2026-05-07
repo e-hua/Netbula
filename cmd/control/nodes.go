@@ -42,11 +42,12 @@ var NodesCmd = &cobra.Command{
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Read the configs from the config file
-		storedConfigs := ctl.Run("", "")
+		storedConfigs := ctl.Run("", "", "")
 
 		nodes := ctl.GetNodes(
 			storedConfigs.ManagerServerAddress,
 			storedConfigs.ControlToken,
+			storedConfigs.ManagerCertFingerprint,
 		)
 
 		printNodesInTable(nodes)

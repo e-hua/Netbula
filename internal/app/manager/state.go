@@ -27,6 +27,9 @@ type MappingStorage struct {
 	workers       []uuid.UUID
 	workerTaskMap map[uuid.UUID][]uuid.UUID
 
+	// Count of tasks assigned to the worker & is Running/Scheduled
+	workerActiveTaskCountMap map[uuid.UUID]int
+
 	stateLogger logger.ManagerLogger
 }
 
@@ -108,23 +111,42 @@ func (state *MappingStorage) rehydrate() error {
 	state.workers = workers
 	state.workerTaskMap = workerTaskMap
 
+	// Rehydrate the `workerActiveTaskCountMap`
+	workerActiveTaskCountMap := make(map[uuid.UUID]int)
+	for workerId, taskIds := range workerTaskMap {
+		for _, taskId := range taskIds {
+			t, err := state.taskDb.Get(taskId.String())
+			if err != nil {
+				return fmt.Errorf("failed to get task from taskDb: %w", err)
+			}
+			if t == nil {
+				return fmt.Errorf("no task with taskId: %s in the taskDb", taskId.String())
+			}
+
+			if t.State == task.Scheduled || t.State == task.Running {
+				workerActiveTaskCountMap[workerId]++
+			}
+		}
+	}
+	state.workerActiveTaskCountMap = workerActiveTaskCountMap
+
 	return nil
 }
 
-// Get the name and the number of tasks of a worker
-func (state *MappingStorage) GetWorkerMetadata(id uuid.UUID) (workerName string, taskCount int) {
+// Get the name and the number of active tasks of a worker
+func (state *MappingStorage) GetWorkerMetadata(id uuid.UUID) (workerName string, activeTaskCount int) {
 	// Locks for reading, other cannot write
 	state.mutex.RLock()
 	defer state.mutex.RUnlock()
 
 	name, _ := state.workerNameDb.Get(id.String())
-	taskCount = len(state.workerTaskMap[id])
+	activeTaskCount = state.workerActiveTaskCountMap[id]
 
 	if name == nil {
-		return "unknown", taskCount
+		return "unknown", activeTaskCount
 	}
 
-	return *name, taskCount
+	return *name, activeTaskCount
 }
 
 // Get the UUID of the workers
@@ -165,6 +187,7 @@ func (state *MappingStorage) RegisterWorker(workerUuid uuid.UUID, workerName str
 	return nil
 }
 
+// Given the new status of a task, update the same task in the manager state
 func (state *MappingStorage) UpdateTask(taskToUpdate *task.Task) error {
 	state.mutex.Lock()
 	defer state.mutex.Unlock()
@@ -187,6 +210,20 @@ func (state *MappingStorage) UpdateTask(taskToUpdate *task.Task) error {
 	// TODO: Change this implementation when more attributes are added
 	if existingTask.State != taskToUpdate.State {
 		state.stateLogger.TaskStatusChanged(*existingTask, *taskToUpdate)
+
+		// Update the number of tasks if task failed/completed
+		if taskToUpdate.State == task.Completed || taskToUpdate.State == task.Failed {
+			workerId, err := state.taskWorkerDb.Get(taskToUpdate.ID.String())
+			if err != nil {
+				return fmt.Errorf("failed to get worker assigned with task %s: %w", taskToUpdate.ID.String(), err)
+			}
+
+			if workerId == nil {
+				return fmt.Errorf("failed to get worker assigned with task %s: %w", taskToUpdate.ID.String(), fmt.Errorf("workerId retrieved is nil"))
+			}
+
+			state.workerActiveTaskCountMap[*workerId]--
+		}
 	}
 
 	existingTask.State = taskToUpdate.State
@@ -224,6 +261,7 @@ func (state *MappingStorage) AssignTaskToWorker(taskToAssign task.Task, workerId
 
 	if !slices.Contains(state.workerTaskMap[workerId], taskToAssign.ID) {
 		state.workerTaskMap[workerId] = append(state.workerTaskMap[workerId], taskToAssign.ID)
+		state.workerActiveTaskCountMap[workerId]++
 	}
 
 	return &taskToAssign, nil

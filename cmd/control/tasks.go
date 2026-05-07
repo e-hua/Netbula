@@ -57,8 +57,12 @@ var TasksCmd = &cobra.Command{
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Read the configs from the config file
-		storedConfigs := ctl.Run("", "")
-		tasks := ctl.GetTasks(storedConfigs.ManagerServerAddress, storedConfigs.ControlToken)
+		storedConfigs := ctl.Run("", "", "")
+		tasks := ctl.GetTasks(
+			storedConfigs.ManagerServerAddress,
+			storedConfigs.ControlToken,
+			storedConfigs.ManagerCertFingerprint,
+		)
 		printTasksInTable(tasks)
 	},
 }
