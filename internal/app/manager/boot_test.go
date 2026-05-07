@@ -182,7 +182,7 @@ func TestApp_Run(t *testing.T) {
 		Manager: mockManager,
 		Api: manager.Api{
 			Manager:  mockManager,
-			TlsToken: testToken,
+			AuthToken: testToken,
 			Logger:   *logger.NewManagerLogger(true, io.Discard),
 		},
 		Logger:                       *logger.NewManagerLogger(true, io.Discard),

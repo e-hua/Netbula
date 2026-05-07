@@ -23,7 +23,7 @@ import (
 type Api struct {
 	Manager  ManagerService
 	Router   *chi.Mux
-	TlsToken string
+	AuthToken string
 
 	Logger logger.ManagerLogger
 }
@@ -72,7 +72,7 @@ func (a *Api) InitRouter(allowVerbose bool) {
 func (a *Api) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get(AuthenticationHeaderKey)
-		if token != a.TlsToken {
+		if token != a.AuthToken {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}

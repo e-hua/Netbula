@@ -82,7 +82,7 @@ func NewApp(configs AppConfigs) (*App, error) {
 
 	managerApi := Api{
 		Manager:  newManager,
-		TlsToken: configs.ManagerConfigs.TlsToken,
+		AuthToken: configs.ManagerConfigs.AuthToken,
 		Logger:   *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
 	}
 

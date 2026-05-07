@@ -92,7 +92,7 @@ var managerCmd = &cobra.Command{
 		log.Printf("Manager API (Secure) for control program to connect to listening on %d\n", cfg.ServerApiPort)
 		log.Printf("Manager API (Secure) for workers to connect to listening on %d\n", cfg.ServerApiPort)
 
-		fmt.Printf("Connection token(tls-token): %v (Enter this when registering control program)\n", cfg.TlsToken)
+		fmt.Printf("Connection token(auth-token): %v (Enter this when registering control program)\n", cfg.AuthToken)
 		fmt.Printf("Tls certificate fingerprint(cert-fingerprint): %v (Enter this when registering workers or control programs)\n", cfg.CertFingerprint)
 
 		app.Run(context.Background())
