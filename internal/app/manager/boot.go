@@ -161,9 +161,9 @@ func SetupConfig(
 	}
 
 	if err != nil {
-		// We don't have previous configurations
-		cert, token := security.GenerateManagerIdentity()
-		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token)
+		// We don't have previous configurations, have to generate from scratch
+		cert, token, certHash := security.GenerateManagerIdentity()
+		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token, certHash)
 	} else {
 		// Update the two fields if the values provided by flags is not default value 0
 		if newWorkerConnectionPort != 0 {

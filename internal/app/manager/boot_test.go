@@ -84,8 +84,8 @@ func TestNewApp(t *testing.T) {
 	testManagerToWorkerListener := InitTestListener(testManagerToWorkerConn)
 	testManagerToControlListener := InitTestListener(testManagerToControlConn)
 
-	testCert, testToken := security.GenerateManagerIdentity()
-	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken)
+	testCert, testToken, testCertFingerprint := security.GenerateManagerIdentity()
+	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken, testCertFingerprint)
 
 	testAppConfigs := manager.AppConfigs{
 		LogDest:   io.Discard,
@@ -146,11 +146,11 @@ func TestApp_Run(t *testing.T) {
 	testManagerToWorkerListener := InitTestListener(testManagerToWorkerConn)
 	testManagerToControlListener := InitTestListener(testManagerToControlConn)
 
-	testCert, testToken := security.GenerateManagerIdentity()
-	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken)
+	testCert, testToken, testCertFingerprint := security.GenerateManagerIdentity()
+	testManagerConfigs := configs.NewManagerConfig(0, 0, testCert, testToken, testCertFingerprint)
 
 	// Start the worker server
-	testWorkerTlsConn := tls.Client(testWorkerToManagerConn, security.GetWorkerTlsConfig(testToken))
+	testWorkerTlsConn := tls.Client(testWorkerToManagerConn, security.GenerateTlsConfig(testCertFingerprint))
 	testWorkerTlsListener, err := yamux.Server(testWorkerTlsConn, nil)
 	assert.NoError(t, err)
 	go func() {

@@ -11,16 +11,20 @@ type ManagerConfig struct {
 	// TlsCertificate tls.Certificate
 	TlsCertificateInBytes [][]byte
 	TlsPrivateKey         []byte
-	// token: SHA-256 hash of certificate
+	// token: random-generated hex-encoded string
 	TlsToken string
+	// fingerprint: SHA-256 hash of certificate,
+	// Used by worker and control program to validate the certificate of TLS connection
+	CertFingerprint string
 }
 
-func NewManagerConfig(workerConnectionPort int, serverApiPort int, tlsCertificate tls.Certificate, tlsToken string) *ManagerConfig {
+func NewManagerConfig(workerConnectionPort int, serverApiPort int, tlsCertificate tls.Certificate, tlsToken string, certHash string) *ManagerConfig {
 	return &ManagerConfig{
 		WorkerConnectionPort:  workerConnectionPort,
 		ServerApiPort:         serverApiPort,
 		TlsCertificateInBytes: tlsCertificate.Certificate,
 		TlsPrivateKey:         tlsCertificate.PrivateKey.(ed25519.PrivateKey),
 		TlsToken:              tlsToken,
+		CertFingerprint:       certHash,
 	}
 }
