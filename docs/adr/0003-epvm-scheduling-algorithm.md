@@ -43,7 +43,7 @@ memCost  = LIEB ^ predictedMemUsage - LIEB ^ memUsage
 score = cpuCost + memCost
 ```
 
-The exponential base means the cost of adding load grows non-linearly — placing a task on an already-busy node is penalised much more heavily than placing it on an idle one.
+The exponential base means the cost of adding load grows non-linearly: placing a task on an already-busy node is penalised much more heavily than placing it on an idle one.
 
 **3. `Pick`: select lowest-cost candidate**
 
@@ -56,10 +56,10 @@ Round Robin remains available as an alternative implementation of the same `Sche
 - Pros:
   - Load-aware: tasks are naturally spread to underutilised nodes, avoiding saturation of any single worker.
   - Hardware-aware: nodes with more cores or memory receive proportionally higher scores for the same task, reflecting their greater capacity.
-  - The exponential cost curve acts as a soft ceiling — nodes approaching full utilisation become increasingly unlikely to be selected without hard-rejecting them.
+  - The exponential cost curve acts as a soft ceiling: nodes approaching full utilisation become increasingly unlikely to be selected without hard-rejecting them.
   - The three-phase `Scheduler` interface (`SelectCandidateNodes` / `Score` / `Pick`) makes it straightforward to swap in alternative algorithms.
 
 - Cons:
   - Candidate filtering only enforces disk constraints. Tasks with CPU or memory requirements that exceed a node's available capacity are not hard-rejected and may still be scheduled there if they score lowest.
   - Node stats are collected by periodic polling (every 15 seconds), so scheduling decisions are based on slightly stale resource data rather than real-time utilisation.
-  - The algorithm has no awareness of task runtime or completion time — a long-running task and a short one are treated identically at scheduling time.
+  - The algorithm has no awareness of task runtime or completion time, which means a long-running task and a short one are treated identically at scheduling time.
