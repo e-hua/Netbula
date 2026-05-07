@@ -22,11 +22,12 @@ var StopCmd = &cobra.Command{
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Read the configs from the config file
-		storedConfigs := ctl.Run("", "")
+		storedConfigs := ctl.Run("", "", "")
 
 		ctl.StopTask(
 			storedConfigs.ManagerServerAddress,
 			storedConfigs.ControlToken,
+			storedConfigs.ManagerCertFingerprint,
 			args[0],
 		)
 	},

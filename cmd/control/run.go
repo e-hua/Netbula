@@ -42,11 +42,12 @@ var RunCmd = &cobra.Command{
 		}
 
 		// Read the configs from the config file
-		storedConfigs := ctl.Run("", "")
+		storedConfigs := ctl.Run("", "", "")
 
 		ctl.StartTask(
 			storedConfigs.ManagerServerAddress,
 			storedConfigs.ControlToken,
+			storedConfigs.ManagerCertFingerprint,
 			data,
 		)
 	},
