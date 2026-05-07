@@ -81,9 +81,9 @@ func NewApp(configs AppConfigs) (*App, error) {
 	}
 
 	managerApi := Api{
-		Manager:  newManager,
-		TlsToken: configs.ManagerConfigs.TlsToken,
-		Logger:   *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
+		Manager:   newManager,
+		AuthToken: configs.ManagerConfigs.AuthToken,
+		Logger:    *logger.NewManagerLoggerWithSubsystem(*managerLogger, "api"),
 	}
 
 	return &App{
@@ -161,9 +161,9 @@ func SetupConfig(
 	}
 
 	if err != nil {
-		// We don't have previous configurations
-		cert, token := security.GenerateManagerIdentity()
-		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token)
+		// We don't have previous configurations, have to generate from scratch
+		cert, token, certHash := security.GenerateManagerIdentity()
+		config = configs.NewManagerConfig(newWorkerConnectionPort, newManagerServerApiPort, cert, token, certHash)
 	} else {
 		// Update the two fields if the values provided by flags is not default value 0
 		if newWorkerConnectionPort != 0 {

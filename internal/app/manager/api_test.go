@@ -99,8 +99,8 @@ func createTestApi(t *testing.T) (manager.Api, *bytes.Buffer, *mocks.MockManager
 	mockManager := mocks.NewMockManagerService(t)
 
 	testApi := manager.Api{
-		Manager:  mockManager,
-		TlsToken: "dummy-token",
+		Manager:   mockManager,
+		AuthToken: "dummy-token",
 
 		Logger: *testManagerLogger,
 	}

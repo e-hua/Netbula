@@ -13,7 +13,19 @@ import (
 	"time"
 )
 
-func GenerateManagerIdentity() (tls.Certificate, string) {
+// Getting a random 32-characters-long string in hexadecimal encoding
+func GenerateRandomToken() string {
+	bytes := make([]byte, 32)
+
+	// Never returns an error
+	rand.Read(bytes)
+
+	hexEncodedString := hex.EncodeToString(bytes)
+
+	return hexEncodedString
+}
+
+func GenerateManagerIdentity() (tls.Certificate, string, string) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 
 	template := x509.Certificate{
@@ -29,26 +41,30 @@ func GenerateManagerIdentity() (tls.Certificate, string) {
 		log.Fatal(err)
 	}
 
-	hash := sha256.Sum256(certDER)
-	token := hex.EncodeToString(hash[:])
+	certHash := sha256.Sum256(certDER)
+	certEncodedHash := hex.EncodeToString(certHash[:])
+
+	token := GenerateRandomToken()
 
 	return tls.Certificate{
 		Certificate: [][]byte{certDER},
 		PrivateKey:  priv,
-	}, token
+	}, token, certEncodedHash
 }
 
 func GetManagerTlsConfig(tlsCertificate tls.Certificate) *tls.Config {
 	return &tls.Config{Certificates: []tls.Certificate{tlsCertificate}}
 }
 
-func GetWorkerTlsConfig(tlsToken string) *tls.Config {
+// Creates TLS config for a specific hash of server certificate
+// Reject other certificates with different hash
+func GenerateTlsConfig(certHash string) *tls.Config {
 	return &tls.Config{
 		InsecureSkipVerify: true, // We manually verify the peer below
 		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			h := sha256.Sum256(rawCerts[0])
-			if hex.EncodeToString(h[:]) != tlsToken {
-				return fmt.Errorf("SECURITY ALERT: Fingerprint mismatch")
+			if hex.EncodeToString(h[:]) != certHash {
+				return fmt.Errorf("SECURITY ALERT: Fingerprint mismatch, the TLS certificate sent by the server has the wrong hash")
 			}
 			return nil
 		},

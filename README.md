@@ -43,11 +43,13 @@ act --container-architecture linux/arm64 --secret-file .secrets
 --worker-port <port_number_for_worker_connection> \
 --api-port <port_number_for_manager_api>`
 
+- Collect `auth-token` and `cert-fingerprint` from the terminal
+
 - Run the worker program:
   `bin/netbula worker \
 --manager <manager_ip_address>:<port_number_for_worker_connection> \
---token <tls_token> \
---name <worker_name>`
+--name <worker_name> \
+--fingerprint <cert-fingerprint>`
 
 ### How to use the control program to get info from your manager instance
 
@@ -55,7 +57,8 @@ act --container-architecture linux/arm64 --secret-file .secrets
 
 `bin/netbula control \
 --manager-address <manager_ip_address>:<port_number_for_manager_api> \
---token <tls_token>`
+--token <auth-token> \
+--fingerprint <cert-fingerprint>`
 
 #### Start a task
 
