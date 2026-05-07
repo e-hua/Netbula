@@ -36,22 +36,22 @@ func connectAndCreateSession(address string, tlsConfig *tls.Config) (*yamux.Sess
 }
 
 type argsParsedResult struct {
-	managerAddress string
-	tlsToken       string
-	workerName     string
+	managerAddress         string
+	managerCertFingerprint string
+	workerName             string
 }
 
-func Run(managerAddr string, token string, name string) {
-	parsedArgs, err := parseWorkerArgs([]string{managerAddr, token, name})
+func Run(managerAddr string, managerCertFingerprint string, name string) {
+	parsedArgs, err := parseWorkerArgs([]string{managerAddr, managerCertFingerprint, name})
 	workerConfigs := setupWorkerConfig(parsedArgs, err)
 
 	var address string = workerConfigs.ManagerAddress
-	var tlsToken string = workerConfigs.TlsToken
+	var certFingerprint string = workerConfigs.ManagerCertFingerprint
 	var workerName string = workerConfigs.WorkerName
 	var workerUuid uuid.UUID = workerConfigs.Uuid
 
 	newWorker := NewWorker(workerUuid, workerName, *queue.New(), "persistent")
-	tlsConfig := security.GetWorkerTlsConfig(tlsToken)
+	tlsConfig := security.GenerateTlsConfig(certFingerprint)
 
 	go newWorker.RunTasksForever()
 	go newWorker.UpdateTaskStatsForever()
@@ -82,9 +82,9 @@ func parseWorkerArgs(args []string) (*argsParsedResult, error) {
 	}
 
 	return &argsParsedResult{
-		managerAddress: args[0],
-		tlsToken:       args[1],
-		workerName:     args[2],
+		managerAddress:         args[0],
+		managerCertFingerprint: args[1],
+		workerName:             args[2],
 	}, nil
 }
 
@@ -95,6 +95,7 @@ func setupWorkerConfig(parsedResult *argsParsedResult, parseErr error) *configs.
 	// If parse failed
 	if parseErr != nil {
 		if !hasExistingConfig {
+			// TODO: Change this log into standard format
 			log.Fatal(
 				"Not enough arguments and cannot find configs in disk, program must be called with " +
 					"go run main.go <manager_ip_address>:<port_number> <tls_token> <worker_name>",
@@ -108,17 +109,17 @@ func setupWorkerConfig(parsedResult *argsParsedResult, parseErr error) *configs.
 	// No existing(previous) configs
 	// Need to create new ones
 	if !hasExistingConfig {
-		if parsedResult.managerAddress != "" || parsedResult.tlsToken != "" || parsedResult.workerName != "" {
+		if parsedResult.managerAddress != "" || parsedResult.managerCertFingerprint != "" || parsedResult.workerName != "" {
 			log.Fatalf("Not existing config, and missing flags: %v", err)
 		}
-		workerConfig = configs.NewWorkerConfig(uuid.New(), parsedResult.workerName, parsedResult.managerAddress, parsedResult.tlsToken)
+		workerConfig = configs.NewWorkerConfig(uuid.New(), parsedResult.workerName, parsedResult.managerAddress, parsedResult.managerCertFingerprint)
 		// Need to update old ones
 	} else {
 		if parsedResult.managerAddress != "" {
 			workerConfig.ManagerAddress = parsedResult.managerAddress
 		}
-		if parsedResult.tlsToken != "" {
-			workerConfig.TlsToken = parsedResult.tlsToken
+		if parsedResult.managerCertFingerprint != "" {
+			workerConfig.ManagerCertFingerprint = parsedResult.managerCertFingerprint
 		}
 		if parsedResult.workerName != "" {
 			workerConfig.WorkerName = parsedResult.workerName
