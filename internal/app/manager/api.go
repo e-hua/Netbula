@@ -21,8 +21,8 @@ import (
 
 // The Api receiving requests from localhost:<Port>
 type Api struct {
-	Manager  ManagerService
-	Router   *chi.Mux
+	Manager   ManagerService
+	Router    *chi.Mux
 	AuthToken string
 
 	Logger logger.ManagerLogger

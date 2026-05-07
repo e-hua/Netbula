@@ -25,7 +25,7 @@ func NewManagerConfig(workerConnectionPort int, serverApiPort int, tlsCertificat
 		ServerApiPort:         serverApiPort,
 		TlsCertificateInBytes: tlsCertificate.Certificate,
 		TlsPrivateKey:         tlsCertificate.PrivateKey.(ed25519.PrivateKey),
-		AuthToken:              authToken,
+		AuthToken:             authToken,
 		CertFingerprint:       certHash,
 	}
 }

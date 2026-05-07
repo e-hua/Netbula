@@ -181,9 +181,9 @@ func TestApp_Run(t *testing.T) {
 	testApp := &manager.App{
 		Manager: mockManager,
 		Api: manager.Api{
-			Manager:  mockManager,
+			Manager:   mockManager,
 			AuthToken: testToken,
-			Logger:   *logger.NewManagerLogger(true, io.Discard),
+			Logger:    *logger.NewManagerLogger(true, io.Discard),
 		},
 		Logger:                       *logger.NewManagerLogger(true, io.Discard),
 		WorkerConnectionTlsListener:  manager.CreateTlsListener(testCert, testManagerToWorkerListener),
